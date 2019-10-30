@@ -4,9 +4,9 @@ use crate::mdbook_graphviz::Graphviz;
 use clap::{App, Arg, ArgMatches, SubCommand};
 use mdbook::errors::Error;
 use mdbook::preprocess::{CmdPreprocessor, Preprocessor};
+use mdbook_graphviz::PREPROCESSOR_NAME;
 use std::io;
 use std::process;
-use mdbook_graphviz::PREPROCESSOR_NAME;
 
 pub fn make_app() -> App<'static, 'static> {
     App::new(PREPROCESSOR_NAME)
@@ -21,7 +21,6 @@ pub fn make_app() -> App<'static, 'static> {
 fn main() {
     let matches = make_app().get_matches();
 
-    // Users will want to construct their own preprocessor here
     let preprocessor = Graphviz::new();
 
     if let Some(sub_args) = matches.subcommand_matches("supports") {

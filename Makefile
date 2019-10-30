@@ -8,6 +8,9 @@ format:
 build: format
 	cargo build
 
+install: format
+	cargo install --force --path .
+
 default: build
 
 clean:
