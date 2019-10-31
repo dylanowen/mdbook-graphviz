@@ -1,24 +1,28 @@
 use mdbook::book::{Book, Chapter};
 use mdbook::errors::Error;
-use mdbook::errors::ErrorKind;
 use mdbook::errors::Result;
 use mdbook::preprocess::{Preprocessor, PreprocessorContext};
 use mdbook::BookItem;
 use pulldown_cmark::{Event, LinkType, Parser, Tag};
 use pulldown_cmark_to_cmark::fmt::cmark;
-use std::io;
-use std::io::Write;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+
+use crate::renderer::{CommandLineGraphviz, GraphvizRenderer};
 
 pub static PREPROCESSOR_NAME: &str = "mdbook-graphviz";
 pub static INFO_STRING_PREFIX: &str = "dot preprocess";
 
-pub struct Graphviz;
+pub struct Graphviz {
+    renderer: Box<dyn GraphvizRenderer>,
+}
 
 impl Graphviz {
-    pub fn new() -> Graphviz {
-        Graphviz
+    pub fn command_line_renderer() -> Graphviz {
+        let renderer = CommandLineGraphviz;
+
+        Graphviz {
+            renderer: Box::new(renderer),
+        }
     }
 }
 
@@ -40,7 +44,7 @@ impl Preprocessor for Graphviz {
                     // remove the chapter filename
                     full_path.pop();
 
-                    error = Graphviz::process_chapter(chapter, &full_path)
+                    error = self.process_chapter(chapter, &full_path)
                 }
             }
         });
@@ -55,7 +59,7 @@ impl Preprocessor for Graphviz {
 }
 
 impl Graphviz {
-    fn process_chapter(chapter: &mut Chapter, chapter_path: &PathBuf) -> Result<()> {
+    fn process_chapter(&self, chapter: &mut Chapter, chapter_path: &PathBuf) -> Result<()> {
         let mut buf = String::with_capacity(chapter.content.len());
         let mut graphviz_block_builder: Option<GraphvizBlockBuilder> = None;
         let mut image_index = 0;
@@ -81,7 +85,7 @@ impl Graphviz {
                             image_index += 1;
                             graphviz_block_builder = None;
 
-                            block.compile_graphviz()?;
+                            block.render_graphviz(&*self.renderer)?;
 
                             Ok(block.tag_events())
                         }
@@ -94,6 +98,7 @@ impl Graphviz {
                         {
                             graphviz_block_builder = Some(GraphvizBlockBuilder::new(
                                 &**info_string,
+                                &chapter.name.clone(),
                                 chapter_path.clone(),
                             ));
 
@@ -118,22 +123,30 @@ impl Graphviz {
 }
 
 struct GraphvizBlockBuilder {
+    chapter_name: String,
     graph_name: String,
     code: String,
     path: PathBuf,
 }
 
 impl GraphvizBlockBuilder {
-    fn new<S: Into<String>>(info_string: S, path: PathBuf) -> GraphvizBlockBuilder {
+    fn new<S: Into<String>>(
+        info_string: S,
+        chapter_name: S,
+        path: PathBuf,
+    ) -> GraphvizBlockBuilder {
         let info_string: String = info_string.into();
-        let mut graph_name = "";
 
+        let chapter_name = chapter_name.into();
+
+        let mut graph_name = "";
         // check if we can have a name at the end of our info string
         if Some(' ') == info_string.chars().nth(INFO_STRING_PREFIX.len()) {
-            graph_name = &info_string[INFO_STRING_PREFIX.len() + 1..];
+            graph_name = &info_string[INFO_STRING_PREFIX.len() + 1..].trim();
         }
 
         GraphvizBlockBuilder {
+            chapter_name: chapter_name.trim().into(),
             graph_name: graph_name.into(),
             code: String::new(),
             path,
@@ -147,9 +160,20 @@ impl GraphvizBlockBuilder {
     fn build(&self, index: usize) -> GraphvizBlock {
         let cleaned_code = self.code.trim();
 
+        let image_name = if !self.graph_name.is_empty() {
+            format!(
+                "{}_{}_{}.generated",
+                normalize_id(&self.chapter_name),
+                normalize_id(&self.graph_name),
+                index
+            )
+        } else {
+            format!("{}_{}.generated", normalize_id(&self.chapter_name), index)
+        };
+
         GraphvizBlock::new(
             self.graph_name.clone(),
-            format!("{}.generated", index),
+            image_name,
             cleaned_code.into(),
             self.path.clone(),
         )
@@ -183,35 +207,10 @@ impl GraphvizBlock {
         ]
     }
 
-    fn compile_graphviz(&self) -> Result<()> {
+    fn render_graphviz(&self, renderer: &dyn GraphvizRenderer) -> Result<()> {
         let output_path = self.chapter_path.join(self.file_name());
-        let output_path_str = output_path.to_str().ok_or_else(|| {
-            ErrorKind::Io(io::Error::new(
-                io::ErrorKind::NotFound,
-                "Couldn't build output path",
-            ))
-        })?;
 
-        let mut child = Command::new("dot")
-            .args(&["-Tsvg", "-o", output_path_str])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
-            .spawn()?;
-
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin.write_all(self.code.as_bytes())?;
-        }
-
-        if child.wait()?.success() {
-            Ok(())
-        } else {
-            Err(ErrorKind::Io(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Error response from Graphviz",
-            ))
-            .into())
-        }
+        renderer.render_graphviz(&self.code, &output_path)
     }
 
     fn image_tag<'a, 'b>(&'a self) -> Tag<'b> {
@@ -227,65 +226,116 @@ impl GraphvizBlock {
     }
 }
 
+pub fn normalize_id(content: &str) -> String {
+    content
+        .chars()
+        .filter_map(|ch| {
+            if ch.is_alphanumeric() {
+                Some(ch.to_ascii_lowercase())
+            } else if ch.is_whitespace() || ch == '_' || ch == '-' {
+                Some('_')
+            } else {
+                None
+            }
+        })
+        .collect::<String>()
+}
+
 #[cfg(test)]
 mod test {
-    use super::Graphviz;
-    use mdbook::book::Chapter;
-    use std::path::PathBuf;
+    use super::*;
 
-    //    // test non processed
-    //    ```dot
-    //    digraph Test {
-    //    a -> b
-    //}
-    //```
-    //
-    //// test no name
-    //```dot preprocess
-    //digraph Test {
-    //a -> b
-    //}
-    //```
-    //
-    //// test no name
-    //```dot preprocess
-    //digraph Test {
-    //a -> b
-    //}
-    //```
-    //
-    //// test with name
-    //```dot preprocess Something
-    //digraph Test {
-    //a -> b
-    //}
-    //```
-    //
-    //// test newlines after images
+    static CHAPTER_NAME: &str = "Test Chapter";
+    static NORMALIZED_CHAPTER_NAME: &str = "test_chapter";
+
+    struct NoopRenderer;
+
+    impl GraphvizRenderer for NoopRenderer {
+        fn render_graphviz(&self, _code: &String, _output_path: &PathBuf) -> Result<()> {
+            Ok(())
+        }
+    }
 
     #[test]
-    fn adds_image() {
-        let content = r#"# Chapter
-```dot
+    fn only_preprocess_flagged_blocks() {
+        let expected = r#"# Chapter
+
+````dot
 digraph Test {
     a -> b
 }
-```
+````"#;
 
+        let mut chapter = new_chapter(expected.into());
+
+        process_chapter(&mut chapter).unwrap();
+
+        assert_eq!(expected, chapter.content);
+    }
+
+    #[test]
+    fn no_name() {
+        let mut chapter = new_chapter(
+            r#"# Chapter
 ```dot preprocess
 digraph Test {
     a -> b
 }
 ```
-"#;
-        let mut chapter = Chapter::new("chapter", content.into(), PathBuf::from("./"), vec![]);
+"#
+            .into(),
+        );
 
-        let expected = r#"# Chapter
+        let expected = format!(
+            r#"# Chapter
 
-  ![](Output.png)"#;
+![]({}_0.generated.svg)
 
-        Graphviz::process_chapter(&mut chapter, &PathBuf::from("./")).unwrap();
+"#,
+            NORMALIZED_CHAPTER_NAME
+        );
+
+        process_chapter(&mut chapter).unwrap();
 
         assert_eq!(expected, chapter.content);
+    }
+
+    #[test]
+    fn named_blocks() {
+        let mut chapter = new_chapter(
+            r#"# Chapter
+```dot preprocess Graph Name
+digraph Test {
+    a -> b
+}
+```
+"#
+            .into(),
+        );
+
+        let expected = format!(
+            r#"# Chapter
+
+![]({}_graph_name_0.generated.svg "Graph Name")
+
+"#,
+            NORMALIZED_CHAPTER_NAME
+        );
+
+        process_chapter(&mut chapter).unwrap();
+
+        assert_eq!(expected, chapter.content);
+    }
+
+    fn process_chapter(chapter: &mut Chapter) -> Result<()> {
+        let graphviz = Graphviz {
+            renderer: Box::new(NoopRenderer),
+        };
+
+        graphviz.process_chapter(chapter, &PathBuf::from("./"))
+    }
+
+    fn new_chapter(content: String) -> Chapter {
+        Chapter::new(CHAPTER_NAME, content.into(), PathBuf::from("./"), vec![])
     }
 }

@@ -1,10 +1,10 @@
-extern crate mdbook_graphviz;
+mod preprocessor;
+mod renderer;
 
-use crate::mdbook_graphviz::Graphviz;
+use crate::preprocessor::{Graphviz, PREPROCESSOR_NAME};
 use clap::{App, Arg, ArgMatches, SubCommand};
 use mdbook::errors::Error;
 use mdbook::preprocess::{CmdPreprocessor, Preprocessor};
-use mdbook_graphviz::PREPROCESSOR_NAME;
 use std::io;
 use std::process;
 
@@ -21,7 +21,7 @@ pub fn make_app() -> App<'static, 'static> {
 fn main() {
     let matches = make_app().get_matches();
 
-    let preprocessor = Graphviz::new();
+    let preprocessor = Graphviz::command_line_renderer();
 
     if let Some(sub_args) = matches.subcommand_matches("supports") {
         handle_supports(&preprocessor, sub_args);
