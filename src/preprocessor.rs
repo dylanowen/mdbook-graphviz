@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use crate::renderer::{CommandLineGraphviz, GraphvizRenderer};
 
 pub static PREPROCESSOR_NAME: &str = "mdbook-graphviz";
-pub static INFO_STRING_PREFIX: &str = "dot preprocess";
+pub static INFO_STRING_PREFIX: &str = "dot process";
 
 pub struct Graphviz {
     renderer: Box<dyn GraphvizRenderer>,
@@ -226,7 +226,7 @@ impl GraphvizBlock {
     }
 }
 
-pub fn normalize_id(content: &str) -> String {
+fn normalize_id(content: &str) -> String {
     content
         .chars()
         .filter_map(|ch| {
@@ -277,7 +277,7 @@ digraph Test {
     fn no_name() {
         let mut chapter = new_chapter(
             r#"# Chapter
-```dot preprocess
+```dot process
 digraph Test {
     a -> b
 }
@@ -304,7 +304,7 @@ digraph Test {
     fn named_blocks() {
         let mut chapter = new_chapter(
             r#"# Chapter
-```dot preprocess Graph Name
+```dot process Graph Name
 digraph Test {
     a -> b
 }
