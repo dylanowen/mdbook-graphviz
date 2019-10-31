@@ -1,6 +1,6 @@
 # mdBook Graphviz
 
-### Install
+## Install
 
 Assumes that `dot` is installed
 
@@ -35,6 +35,8 @@ processed -> graph
 ![](chapter_0.generated.svg)
 ~~~
 
+![](sample_0.generated.svg)
+
 #### Processed `dot` With Name
 ~~~markdown
 ```dot process Named Graph
@@ -45,6 +47,8 @@ processed -> graph
 ~~~markdown
 ![](chapter_named_graph_0.generated.svg, "Named Graph")
 ~~~
+
+![](sample_0.generated.svg "Named Graph")
 
 ## .gitignore
 ```
