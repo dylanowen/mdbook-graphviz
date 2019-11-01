@@ -3,6 +3,7 @@ name = "mdbook-graphviz"
 version = "0.0.1"
 authors = ["Dylan Owen"]
 description = "mdbook preprocessor to add graphviz support"
+readme = "Readme.md"
 license = "MPL-2.0"
 homepage = "https://github.com/dylanowen/mdbook-graphviz"
 repository = "https://github.com/dylanowen/mdbook-graphviz"
