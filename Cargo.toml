@@ -1,6 +1,6 @@
 [package]
 name = "mdbook-graphviz"
-version = "0.1.0"
+version = "0.0.1"
 authors = ["Dylan"]
 description = "mdbook preprocessor to add graphviz support"
 license = "MPL-2.0"
