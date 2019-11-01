@@ -2,8 +2,16 @@
 
 ## Install
 
-Assumes that `dot` is installed
+```
+cargo instal mdbook-graphviz
+```
 
+Install [Graphvis](https://graphviz.gitlab.io/download/)
+```
+brew install graphviz
+```
+
+`book.toml`
 ```toml
 [preprocessor.graphviz]
 command = "mdbook-graphviz"
@@ -11,46 +19,62 @@ command = "mdbook-graphviz"
 
 ## Usage
 
-#### Ignored `dot`
-~~~markdown
-```dot
-skip -> graph
-```
-~~~
+Just `dot` is supported, but any of the other graphviz tools would be easy to add.
 
-~~~markdown
-```dot
-skip -> graph
-```
-~~~
+### Mark A `dot` Code Block For Processing
 
-#### Processed `dot`
+#### Input
 ~~~markdown
 ```dot process
 processed -> graph
 ```
 ~~~
 
+#### Output
 ~~~markdown
 ![](chapter_0.generated.svg)
 ~~~
 
+#### Rendered
 ![](sample_0.generated.svg)
 
-#### Processed `dot` With Name
+### Add A Name For Your Graph
+
+#### Input
 ~~~markdown
 ```dot process Named Graph
 processed -> graph
 ```
 ~~~
 
+#### Output
 ~~~markdown
 ![](chapter_named_graph_0.generated.svg, "Named Graph")
 ~~~
 
+#### Rendered
 ![](sample_0.generated.svg "Named Graph")
 
+### `dot` Code Blocks Without The `process` Flag Are Ignored
+
+#### Input
+~~~markdown
+```dot
+skip -> graph
+```
+~~~
+
+#### Output
+~~~markdown
+```dot
+skip -> graph
+```
+~~~
+
 ## .gitignore
+
+The generated svg files are output into the book src folder for now, this `.gitignore` should cover them
+
 ```
 *.generated.svg
 ```
