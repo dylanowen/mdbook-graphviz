@@ -29,7 +29,9 @@ Just `dot` is supported, but any of the other graphviz tools would be easy to ad
 #### Input
 ~~~markdown
 ```dot process
-processed -> graph
+digraph {
+    processed -> graph
+}
 ```
 ~~~
 
@@ -46,7 +48,9 @@ processed -> graph
 #### Input
 ~~~markdown
 ```dot process Named Graph
-processed -> graph
+digraph {
+    processed -> graph
+}
 ```
 ~~~
 
@@ -63,14 +67,18 @@ processed -> graph
 #### Input
 ~~~markdown
 ```dot
-skip -> graph
+digraph {
+    processed -> graph
+}
 ```
 ~~~
 
 #### Output
 ~~~markdown
 ```dot
-skip -> graph
+digraph {
+    processed -> graph
+}
 ```
 ~~~
 
