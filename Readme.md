@@ -6,10 +6,10 @@
 ## Install
 
 ```
-cargo instal mdbook-graphviz
+cargo install mdbook-graphviz
 ```
 
-Install [Graphvis](https://graphviz.gitlab.io/download/)
+Install [Graphviz](https://graphviz.gitlab.io/download/)
 ```
 brew install graphviz
 ```
