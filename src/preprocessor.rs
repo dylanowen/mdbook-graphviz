@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 use crate::renderer::{CommandLineGraphviz, GraphvizRenderer};
 
-pub static PREPROCESSOR_NAME: &str = "mdbook-graphviz";
+pub static PREPROCESSOR_NAME: &str = "graphviz";
 pub static INFO_STRING_PREFIX: &str = "dot process";
 
 pub struct Graphviz {
