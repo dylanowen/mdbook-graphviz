@@ -1,7 +1,7 @@
 # mdBook Graphviz
 
 [![crates.io](https://img.shields.io/crates/v/mdbook-graphviz.svg)](https://crates.io/crates/mdbook-graphviz)
-[![LICENSE](https://img.shields.io/github/license/rust-lang/mdBook.svg)](LICENSE)
+[![LICENSE](https://img.shields.io/github/license/dylanowen/mdbook-graphviz.svg)](LICENSE)
 
 ## Install
 

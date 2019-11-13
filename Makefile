@@ -5,7 +5,10 @@ SHELL:=/bin/bash
 format:
 	cargo fmt
 
-build: format
+clippy:
+	cargo clippy
+
+build: format clippy
 	cargo build
 
 install: format

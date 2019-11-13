@@ -111,7 +111,7 @@ impl Graphviz {
             .collect();
 
         // get our result and combine our internal Vecs
-        let events = event_results?.into_iter().flat_map(|e| e);
+        let events = event_results?.into_iter().flatten();
 
         cmark(events, &mut buf, None)
             .map_err(|err| Error::from(format!("Markdown serialization failed: {}", err)))?;
@@ -139,11 +139,12 @@ impl GraphvizBlockBuilder {
 
         let chapter_name = chapter_name.into();
 
-        let mut graph_name = "";
         // check if we can have a name at the end of our info string
-        if Some(' ') == info_string.chars().nth(INFO_STRING_PREFIX.len()) {
-            graph_name = &info_string[INFO_STRING_PREFIX.len() + 1..].trim();
-        }
+        let graph_name = if Some(' ') == info_string.chars().nth(INFO_STRING_PREFIX.len()) {
+            &info_string[INFO_STRING_PREFIX.len() + 1..].trim()
+        } else {
+            ""
+        };
 
         GraphvizBlockBuilder {
             chapter_name: chapter_name.trim().into(),
