@@ -1,37 +1,39 @@
+use std::marker::PhantomData;
+use std::path::PathBuf;
+
 use mdbook::book::{Book, Chapter};
 use mdbook::errors::Error;
 use mdbook::errors::Result;
 use mdbook::preprocess::{Preprocessor, PreprocessorContext};
 use mdbook::BookItem;
-use pulldown_cmark::{Event, LinkType, Parser, Tag};
+use pulldown_cmark::{Event, Parser, Tag};
 use pulldown_cmark_to_cmark::fmt::cmark;
-use std::path::PathBuf;
+use toml::Value;
 
-use crate::renderer::{CommandLineGraphviz, GraphvizRenderer};
+use crate::renderer::{CLIGraphviz, CLIGraphvizToFile, GraphvizRenderer};
 
 pub static PREPROCESSOR_NAME: &str = "graphviz";
 pub static INFO_STRING_PREFIX: &str = "dot process";
 
-pub struct Graphviz {
-    renderer: Box<dyn GraphvizRenderer>,
+pub struct GraphvizPreprocessor;
+
+pub struct Graphviz<R: GraphvizRenderer> {
+    _phantom: PhantomData<*const R>,
 }
 
-impl Graphviz {
-    pub fn command_line_renderer() -> Graphviz {
-        let renderer = CommandLineGraphviz;
-
-        Graphviz {
-            renderer: Box::new(renderer),
-        }
-    }
-}
-
-impl Preprocessor for Graphviz {
+impl Preprocessor for GraphvizPreprocessor {
     fn name(&self) -> &str {
         PREPROCESSOR_NAME
     }
 
     fn run(&self, ctx: &PreprocessorContext, mut book: Book) -> Result<Book> {
+        let output_to_file = ctx
+            .config
+            .get_preprocessor(self.name())
+            .and_then(|t| t.get("output-to-file"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+
         let src_dir = ctx.root.clone().join(&ctx.config.book.src);
         let mut error = Ok(());
 
@@ -44,7 +46,11 @@ impl Preprocessor for Graphviz {
                     // remove the chapter filename
                     full_path.pop();
 
-                    error = self.process_chapter(chapter, &full_path)
+                    error = if !output_to_file {
+                        Graphviz::<CLIGraphviz>::new().process_chapter(chapter, &full_path)
+                    } else {
+                        Graphviz::<CLIGraphvizToFile>::new().process_chapter(chapter, &full_path)
+                    };
                 }
             }
         });
@@ -53,12 +59,18 @@ impl Preprocessor for Graphviz {
     }
 
     fn supports_renderer(&self, _renderer: &str) -> bool {
-        // since we're just outputting markdown images, this should support any renderer
+        // since we're just outputting markdown images or inline html, this "should" support any renderer
         true
     }
 }
 
-impl Graphviz {
+impl<R: GraphvizRenderer> Graphviz<R> {
+    fn new() -> Graphviz<R> {
+        Graphviz {
+            _phantom: PhantomData,
+        }
+    }
+
     fn process_chapter(&self, chapter: &mut Chapter, chapter_path: &PathBuf) -> Result<()> {
         let mut buf = String::with_capacity(chapter.content.len());
         let mut graphviz_block_builder: Option<GraphvizBlockBuilder> = None;
@@ -66,10 +78,11 @@ impl Graphviz {
 
         let event_results: Result<Vec<Vec<Event>>> = Parser::new(&chapter.content)
             .map(|e| {
-                if let Some(ref mut builder) = graphviz_block_builder {
+                if let Some(mut builder) = graphviz_block_builder.take() {
                     match e {
                         Event::Text(ref text) => {
                             builder.append_code(&**text);
+                            graphviz_block_builder = Some(builder);
 
                             Ok(vec![])
                         }
@@ -83,13 +96,14 @@ impl Graphviz {
                             // finish our digraph
                             let block = builder.build(image_index);
                             image_index += 1;
-                            graphviz_block_builder = None;
 
-                            block.render_graphviz(&*self.renderer)?;
-
-                            Ok(block.tag_events())
+                            R::render_graphviz(block)
                         }
-                        _ => Ok(vec![]),
+                        _ => {
+                            graphviz_block_builder = Some(builder);
+
+                            Ok(vec![])
+                        }
                     }
                 } else {
                     match e {
@@ -158,72 +172,55 @@ impl GraphvizBlockBuilder {
         self.code.push_str(&code.into());
     }
 
-    fn build(&self, index: usize) -> GraphvizBlock {
-        let cleaned_code = self.code.trim();
+    fn build(self, index: usize) -> GraphvizBlock {
+        let GraphvizBlockBuilder {
+            chapter_name,
+            graph_name,
+            code,
+            path,
+        } = self;
+        let cleaned_code = code.trim();
 
+        GraphvizBlock {
+            graph_name,
+            code: cleaned_code.into(),
+            chapter_name,
+            chapter_path: path,
+            index,
+        }
+    }
+}
+
+pub struct GraphvizBlock {
+    pub graph_name: String,
+    pub code: String,
+    pub chapter_name: String,
+    pub chapter_path: PathBuf,
+    pub index: usize,
+}
+
+impl GraphvizBlock {
+    pub fn file_name(&self) -> String {
         let image_name = if !self.graph_name.is_empty() {
             format!(
                 "{}_{}_{}.generated",
                 normalize_id(&self.chapter_name),
                 normalize_id(&self.graph_name),
-                index
+                self.index
             )
         } else {
-            format!("{}_{}.generated", normalize_id(&self.chapter_name), index)
+            format!(
+                "{}_{}.generated",
+                normalize_id(&self.chapter_name),
+                self.index
+            )
         };
 
-        GraphvizBlock::new(
-            self.graph_name.clone(),
-            image_name,
-            cleaned_code.into(),
-            self.path.clone(),
-        )
-    }
-}
-
-struct GraphvizBlock {
-    graph_name: String,
-    image_name: String,
-    code: String,
-    chapter_path: PathBuf,
-}
-
-impl GraphvizBlock {
-    fn new<S: Into<String>>(graph_name: S, image_name: S, code: S, path: PathBuf) -> GraphvizBlock {
-        let image_name = image_name.into();
-
-        GraphvizBlock {
-            graph_name: graph_name.into(),
-            image_name,
-            code: code.into(),
-            chapter_path: path,
-        }
+        format!("{}.svg", image_name)
     }
 
-    fn tag_events<'a, 'b>(&'a self) -> Vec<Event<'b>> {
-        vec![
-            Event::Start(self.image_tag()),
-            Event::End(self.image_tag()),
-            Event::Text("\n\n".into()),
-        ]
-    }
-
-    fn render_graphviz(&self, renderer: &dyn GraphvizRenderer) -> Result<()> {
-        let output_path = self.chapter_path.join(self.file_name());
-
-        renderer.render_graphviz(&self.code, &output_path)
-    }
-
-    fn image_tag<'a, 'b>(&'a self) -> Tag<'b> {
-        Tag::Image(
-            LinkType::Inline,
-            self.file_name().into(),
-            self.graph_name.clone().into(),
-        )
-    }
-
-    fn file_name(&self) -> String {
-        format!("{}.svg", self.image_name)
+    pub fn output_path(&self) -> PathBuf {
+        self.chapter_path.join(self.file_name())
     }
 }
 
@@ -252,8 +249,16 @@ mod test {
     struct NoopRenderer;
 
     impl GraphvizRenderer for NoopRenderer {
-        fn render_graphviz(&self, _code: &String, _output_path: &PathBuf) -> Result<()> {
-            Ok(())
+        fn render_graphviz<'a>(block: GraphvizBlock) -> Result<Vec<Event<'a>>> {
+            let file_name = block.file_name();
+            let output_path = block.output_path();
+            let GraphvizBlock {
+                graph_name, index, ..
+            } = block;
+
+            Ok(vec![Event::Text(
+                format!("{}|{:?}|{}|{}", file_name, output_path, graph_name, index).into(),
+            )])
         }
     }
 
@@ -271,7 +276,7 @@ digraph Test {
 
         process_chapter(&mut chapter).unwrap();
 
-        assert_eq!(expected, chapter.content);
+        assert_eq!(chapter.content, expected);
     }
 
     #[test]
@@ -290,15 +295,13 @@ digraph Test {
         let expected = format!(
             r#"# Chapter
 
-![]({}_0.generated.svg)
-
-"#,
-            NORMALIZED_CHAPTER_NAME
+{}_0.generated.svg|"./{}_0.generated.svg"||0"#,
+            NORMALIZED_CHAPTER_NAME, NORMALIZED_CHAPTER_NAME
         );
 
         process_chapter(&mut chapter).unwrap();
 
-        assert_eq!(expected, chapter.content);
+        assert_eq!(chapter.content, expected);
     }
 
     #[test]
@@ -317,21 +320,17 @@ digraph Test {
         let expected = format!(
             r#"# Chapter
 
-![]({}_graph_name_0.generated.svg "Graph Name")
-
-"#,
-            NORMALIZED_CHAPTER_NAME
+{}_graph_name_0.generated.svg|"./{}_graph_name_0.generated.svg"|Graph Name|0"#,
+            NORMALIZED_CHAPTER_NAME, NORMALIZED_CHAPTER_NAME
         );
 
         process_chapter(&mut chapter).unwrap();
 
-        assert_eq!(expected, chapter.content);
+        assert_eq!(chapter.content, expected);
     }
 
     fn process_chapter(chapter: &mut Chapter) -> Result<()> {
-        let graphviz = Graphviz {
-            renderer: Box::new(NoopRenderer),
-        };
+        let graphviz = Graphviz::<NoopRenderer>::new();
 
         graphviz.process_chapter(chapter, &PathBuf::from("./"))
     }

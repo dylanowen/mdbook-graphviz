@@ -11,7 +11,10 @@ clippy:
 build: format clippy
 	cargo build
 
-install: format
+test: format clippy
+	cargo test
+
+install: format clippy
 	cargo install --force --path .
 
 default: build

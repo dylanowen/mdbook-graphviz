@@ -1,12 +1,17 @@
-mod preprocessor;
-mod renderer;
+#[macro_use]
+extern crate lazy_static;
 
-use crate::preprocessor::{Graphviz, PREPROCESSOR_NAME};
+use std::io;
+use std::process;
+
 use clap::{App, Arg, ArgMatches, SubCommand};
 use mdbook::errors::Error;
 use mdbook::preprocess::{CmdPreprocessor, Preprocessor};
-use std::io;
-use std::process;
+
+use crate::preprocessor::{GraphvizPreprocessor, PREPROCESSOR_NAME};
+
+mod preprocessor;
+mod renderer;
 
 pub fn make_app() -> App<'static, 'static> {
     App::new(PREPROCESSOR_NAME)
@@ -21,7 +26,7 @@ pub fn make_app() -> App<'static, 'static> {
 fn main() {
     let matches = make_app().get_matches();
 
-    let preprocessor = Graphviz::command_line_renderer();
+    let preprocessor = GraphvizPreprocessor;
 
     if let Some(sub_args) = matches.subcommand_matches("supports") {
         handle_supports(&preprocessor, sub_args);
