@@ -25,6 +25,7 @@ impl GraphvizRenderer for CLIGraphviz {
                 Event::Start(Tag::HtmlBlock),
                 Event::Text(format_output(graph_svg).into()),
                 Event::End(Tag::HtmlBlock),
+                Event::Text("\n\n".into()),
             ])
         } else {
             Err(ErrorKind::Io(io::Error::new(
