@@ -2,7 +2,6 @@ use std::io;
 use std::io::Write;
 use std::process::{Child, Command, Stdio};
 
-use mdbook::errors::ErrorKind;
 use mdbook::errors::Result;
 use pulldown_cmark::{Event, LinkType, Tag};
 use regex::Regex;
@@ -28,10 +27,10 @@ impl GraphvizRenderer for CLIGraphviz {
                 Event::Text("\n\n".into()),
             ])
         } else {
-            Err(ErrorKind::Io(io::Error::new(
+            Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "Error response from Graphviz",
-            ))
+            )
             .into())
         }
     }
@@ -48,10 +47,10 @@ impl GraphvizRenderer for CLIGraphvizToFile {
         } = block;
 
         let output_path_str = output_path.to_str().ok_or_else(|| {
-            ErrorKind::Io(io::Error::new(
+            io::Error::new(
                 io::ErrorKind::NotFound,
                 "Couldn't build output path",
-            ))
+            )
         })?;
 
         if call_graphviz(&["-Tsvg", "-o", output_path_str], &code)?
@@ -66,10 +65,10 @@ impl GraphvizRenderer for CLIGraphvizToFile {
                 Event::Text("\n\n".into()),
             ])
         } else {
-            Err(ErrorKind::Io(io::Error::new(
+            Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "Error response from Graphviz",
-            ))
+            )
             .into())
         }
     }

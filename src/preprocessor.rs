@@ -2,7 +2,6 @@ use std::marker::PhantomData;
 use std::path::PathBuf;
 
 use mdbook::book::{Book, Chapter};
-use mdbook::errors::Error;
 use mdbook::errors::Result;
 use mdbook::preprocess::{Preprocessor, PreprocessorContext};
 use mdbook::BookItem;
@@ -41,7 +40,8 @@ impl Preprocessor for GraphvizPreprocessor {
             // only continue editing the book if we don't have any errors
             if error.is_ok() {
                 if let BookItem::Chapter(ref mut chapter) = item {
-                    let mut full_path = src_dir.join(&chapter.path);
+                    let path = chapter.path.as_ref().unwrap();
+                    let mut full_path = src_dir.join(path);
 
                     // remove the chapter filename
                     full_path.pop();
@@ -63,6 +63,7 @@ impl Preprocessor for GraphvizPreprocessor {
         true
     }
 }
+
 
 impl<R: GraphvizRenderer> Graphviz<R> {
     fn new() -> Graphviz<R> {
@@ -127,8 +128,7 @@ impl<R: GraphvizRenderer> Graphviz<R> {
         // get our result and combine our internal Vecs
         let events = event_results?.into_iter().flatten();
 
-        cmark(events, &mut buf, None)
-            .map_err(|err| Error::from(format!("Markdown serialization failed: {}", err)))?;
+        cmark(events, &mut buf, None)?;
 
         chapter.content = buf;
 
