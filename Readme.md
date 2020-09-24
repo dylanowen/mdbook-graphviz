@@ -30,7 +30,7 @@ Just `dot` is supported, but any of the other graphviz tools would be easy to ad
 ~~~markdown
 ```dot process
 digraph {
-    processed -> graph
+    "processed" -> "graph"
 }
 ```
 ~~~
@@ -49,7 +49,7 @@ digraph {
 ~~~markdown
 ```dot process Named Graph
 digraph {
-    processed -> graph
+    "processed" -> "graph"
 }
 ```
 ~~~
@@ -68,7 +68,7 @@ digraph {
 ~~~markdown
 ```dot
 digraph {
-    processed -> graph
+    "processed" -> "graph"
 }
 ```
 ~~~
@@ -77,7 +77,7 @@ digraph {
 ~~~markdown
 ```dot
 digraph {
-    processed -> graph
+    "processed" -> "graph"
 }
 ```
 ~~~
