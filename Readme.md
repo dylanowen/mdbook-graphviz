@@ -20,7 +20,7 @@ brew install graphviz
 ```toml
 [preprocessor.graphviz]
 command = "mdbook-graphviz"
-output-to-file = false # defaults to false, change to true to write svg files intstead of rendering inline
+output-to-file = false # defaults to false, change to true to create SVG files instead of rendering them inline
 ```
 
 ## Usage
