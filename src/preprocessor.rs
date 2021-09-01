@@ -4,8 +4,9 @@ use std::path::PathBuf;
 use mdbook::book::{Book, Chapter};
 use mdbook::errors::Result;
 use mdbook::preprocess::{Preprocessor, PreprocessorContext};
+use mdbook::utils::new_cmark_parser;
 use mdbook::BookItem;
-use pulldown_cmark::{CodeBlockKind, Event, Parser, Tag};
+use pulldown_cmark::{CodeBlockKind, Event, Tag};
 use pulldown_cmark_to_cmark::cmark;
 use toml::Value;
 
@@ -76,7 +77,7 @@ impl<R: GraphvizRenderer> Graphviz<R> {
         let mut graphviz_block_builder: Option<GraphvizBlockBuilder> = None;
         let mut image_index = 0;
 
-        let event_results: Result<Vec<Vec<Event>>> = Parser::new(&chapter.content)
+        let event_results: Result<Vec<Vec<Event>>> = new_cmark_parser(&chapter.content)
             .map(|e| {
                 if let Some(mut builder) = graphviz_block_builder.take() {
                     match e {
@@ -329,7 +330,7 @@ digraph Test {
     }
 
     #[test]
-    fn escaping() {
+    fn preserve_escaping() {
         let mut chapter = new_chapter(
             r#"# Chapter
 
@@ -352,6 +353,44 @@ digraph Test {
 *asteriks*
 /*asteriks/*
 ( \int x dx = \frac{{x^2}}{{2}} + C)
+
+{}_graph_name_0.generated.svg|"./{}_graph_name_0.generated.svg"|Graph Name|0"#,
+            NORMALIZED_CHAPTER_NAME, NORMALIZED_CHAPTER_NAME
+        );
+
+        process_chapter(&mut chapter).unwrap();
+
+        assert_eq!(chapter.content, expected);
+    }
+
+    #[test]
+    fn preserve_tables() {
+        let mut chapter = new_chapter(
+            r#"# Chapter
+
+|Tables|Are|Cool|
+|------|:-:|---:|
+|col 1 is|left-aligned|$1600|
+|col 2 is|centered|$12|
+|col 3 is|right-aligned|$1|
+
+```dot process Graph Name
+digraph Test {
+    a -> b
+}
+```
+"#
+            .into(),
+        );
+
+        let expected = format!(
+            r#"# Chapter
+
+|Tables|Are|Cool|
+|------|:-:|---:|
+|col 1 is|left-aligned|$1600|
+|col 2 is|centered|$12|
+|col 3 is|right-aligned|$1|
 
 {}_graph_name_0.generated.svg|"./{}_graph_name_0.generated.svg"|Graph Name|0"#,
             NORMALIZED_CHAPTER_NAME, NORMALIZED_CHAPTER_NAME
