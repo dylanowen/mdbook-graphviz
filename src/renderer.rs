@@ -21,17 +21,11 @@ impl GraphvizRenderer for CLIGraphviz {
             let graph_svg = String::from_utf8(output.stdout)?;
 
             Ok(vec![
-                Event::Start(Tag::HtmlBlock),
-                Event::Text(format_output(graph_svg).into()),
-                Event::End(Tag::HtmlBlock),
+                Event::Html(format_output(graph_svg).into()),
                 Event::Text("\n\n".into()),
             ])
         } else {
-            Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Error response from Graphviz",
-            )
-            .into())
+            Err(io::Error::new(io::ErrorKind::InvalidData, "Error response from Graphviz").into())
         }
     }
 }
@@ -46,12 +40,9 @@ impl GraphvizRenderer for CLIGraphvizToFile {
             graph_name, code, ..
         } = block;
 
-        let output_path_str = output_path.to_str().ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::NotFound,
-                "Couldn't build output path",
-            )
-        })?;
+        let output_path_str = output_path
+            .to_str()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Couldn't build output path"))?;
 
         if call_graphviz(&["-Tsvg", "-o", output_path_str], &code)?
             .wait()?
@@ -65,11 +56,7 @@ impl GraphvizRenderer for CLIGraphvizToFile {
                 Event::Text("\n\n".into()),
             ])
         } else {
-            Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Error response from Graphviz",
-            )
-            .into())
+            Err(io::Error::new(io::ErrorKind::InvalidData, "Error response from Graphviz").into())
         }
     }
 }
@@ -123,12 +110,11 @@ mod test {
         };
 
         let mut events = CLIGraphviz::render_graphviz(block).unwrap().into_iter();
-        assert_eq!(events.next(), Some(Event::Start(Tag::HtmlBlock)));
-        if let Some(Event::Text(_)) = events.next() {
+        if let Some(Event::Html(_)) = events.next() {
         } else {
             panic!("Unexpected next event")
         }
-        assert_eq!(events.next(), Some(Event::End(Tag::HtmlBlock)));
+        assert_eq!(events.next(), Some(Event::Text("\n\n".into())));
         assert_eq!(events.next(), None);
     }
 }
