@@ -10,14 +10,17 @@ cargo install mdbook-graphviz
 ```
 
 Install [Graphviz](https://graphviz.gitlab.io/download/)
+
 ```
 brew install graphviz
 ```
 
 `book.toml`
+
 ```toml
 [preprocessor.graphviz]
 command = "mdbook-graphviz"
+output-to-file = false # defaults to false, change to true to write svg files intstead of rendering inline
 ```
 
 ## Usage
@@ -27,6 +30,7 @@ Just `dot` is supported, but any of the other graphviz tools would be easy to ad
 ### Mark A `dot` Code Block For Processing
 
 #### Input
+
 ~~~markdown
 ```dot process
 digraph {
@@ -36,35 +40,21 @@ digraph {
 ~~~
 
 #### Output
+
 ~~~markdown
-![](chapter_0.generated.svg)
+<div><svg>...</svg></div>
+
+
 ~~~
 
 #### Rendered
+
 ![](sample_0.generated.svg)
-
-### Add A Name For Your Graph
-
-#### Input
-~~~markdown
-```dot process Named Graph
-digraph {
-    "processed" -> "graph"
-}
-```
-~~~
-
-#### Output
-~~~markdown
-![](chapter_named_graph_0.generated.svg, "Named Graph")
-~~~
-
-#### Rendered
-![](sample_0.generated.svg "Named Graph")
 
 ### `dot` Code Blocks Without The `process` Flag Are Ignored
 
 #### Input
+
 ~~~markdown
 ```dot
 digraph {
@@ -74,6 +64,7 @@ digraph {
 ~~~
 
 #### Output
+
 ~~~markdown
 ```dot
 digraph {
@@ -82,9 +73,25 @@ digraph {
 ```
 ~~~
 
-## .gitignore
+## Output To File
 
-The generated svg files are output into the book src folder for now, this `.gitignore` should cover them
+The default is to embed the SVG as HTML in the Markdown, however if this causes problems or if the actual files are
+needed you can disable this via the `output-to-file` flag:
+
+```toml
+[preprocessor.graphviz]
+output-to-file = true
+```
+
+or
+
+```shell
+MDBOOK_preprocessor__graphviz__output_to_file="true" mdbook build
+```
+
+### .gitignore
+
+This `.gitignore` should cover the generated SVG files.
 
 ```
 *.generated.svg
