@@ -22,6 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      # Install graphviz
+      - uses: ts-graphviz/setup-graphviz@v1
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal

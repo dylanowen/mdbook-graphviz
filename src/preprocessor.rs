@@ -5,8 +5,8 @@ use mdbook::book::{Book, Chapter};
 use mdbook::errors::Result;
 use mdbook::preprocess::{Preprocessor, PreprocessorContext};
 use mdbook::BookItem;
-use pulldown_cmark::{Event, Parser, Tag};
-use pulldown_cmark_to_cmark::fmt::cmark;
+use pulldown_cmark::{CodeBlockKind, Event, Parser, Tag};
+use pulldown_cmark_to_cmark::cmark;
 use toml::Value;
 
 use crate::renderer::{CLIGraphviz, CLIGraphvizToFile, GraphvizRenderer};
@@ -47,9 +47,9 @@ impl Preprocessor for GraphvizPreprocessor {
                     full_path.pop();
 
                     error = if !output_to_file {
-                        Graphviz::<CLIGraphviz>::new().process_chapter(chapter, &full_path)
+                        Graphviz::<CLIGraphviz>::new().process_chapter(chapter, full_path)
                     } else {
-                        Graphviz::<CLIGraphvizToFile>::new().process_chapter(chapter, &full_path)
+                        Graphviz::<CLIGraphvizToFile>::new().process_chapter(chapter, full_path)
                     };
                 }
             }
@@ -64,7 +64,6 @@ impl Preprocessor for GraphvizPreprocessor {
     }
 }
 
-
 impl<R: GraphvizRenderer> Graphviz<R> {
     fn new() -> Graphviz<R> {
         Graphviz {
@@ -72,7 +71,7 @@ impl<R: GraphvizRenderer> Graphviz<R> {
         }
     }
 
-    fn process_chapter(&self, chapter: &mut Chapter, chapter_path: &PathBuf) -> Result<()> {
+    fn process_chapter(&self, chapter: &mut Chapter, chapter_path: PathBuf) -> Result<()> {
         let mut buf = String::with_capacity(chapter.content.len());
         let mut graphviz_block_builder: Option<GraphvizBlockBuilder> = None;
         let mut image_index = 0;
@@ -87,7 +86,7 @@ impl<R: GraphvizRenderer> Graphviz<R> {
 
                             Ok(vec![])
                         }
-                        Event::End(Tag::CodeBlock(ref info_string)) => {
+                        Event::End(Tag::CodeBlock(CodeBlockKind::Fenced(ref info_string))) => {
                             assert_eq!(
                                 Some(0),
                                 (&**info_string).find(INFO_STRING_PREFIX),
@@ -108,7 +107,7 @@ impl<R: GraphvizRenderer> Graphviz<R> {
                     }
                 } else {
                     match e {
-                        Event::Start(Tag::CodeBlock(ref info_string))
+                        Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(ref info_string)))
                             if (&**info_string).find(INFO_STRING_PREFIX) == Some(0) =>
                         {
                             graphviz_block_builder = Some(GraphvizBlockBuilder::new(
@@ -329,10 +328,44 @@ digraph Test {
         assert_eq!(chapter.content, expected);
     }
 
+    #[test]
+    fn escaping() {
+        let mut chapter = new_chapter(
+            r#"# Chapter
+
+*asteriks*
+/*asteriks/*
+( \int x dx = \frac{x^2}{2} + C)
+
+```dot process Graph Name
+digraph Test {
+    a -> b
+}
+```
+"#
+            .into(),
+        );
+
+        let expected = format!(
+            r#"# Chapter
+
+*asteriks*
+/*asteriks/*
+( \int x dx = \frac{{x^2}}{{2}} + C)
+
+{}_graph_name_0.generated.svg|"./{}_graph_name_0.generated.svg"|Graph Name|0"#,
+            NORMALIZED_CHAPTER_NAME, NORMALIZED_CHAPTER_NAME
+        );
+
+        process_chapter(&mut chapter).unwrap();
+
+        assert_eq!(chapter.content, expected);
+    }
+
     fn process_chapter(chapter: &mut Chapter) -> Result<()> {
         let graphviz = Graphviz::<NoopRenderer>::new();
 
-        graphviz.process_chapter(chapter, &PathBuf::from("./"))
+        graphviz.process_chapter(chapter, PathBuf::from("./"))
     }
 
     fn new_chapter(content: String) -> Chapter {
