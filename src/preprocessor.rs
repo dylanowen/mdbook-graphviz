@@ -41,7 +41,10 @@ impl Preprocessor for GraphvizPreprocessor {
             // only continue editing the book if we don't have any errors
             if error.is_ok() {
                 if let BookItem::Chapter(ref mut chapter) = item {
-                    let path = chapter.path.as_ref().unwrap();
+                    let path = match chapter.path.as_ref() {
+                        Some(path) => path,
+                        None => return,
+                    };
                     let mut full_path = src_dir.join(path);
 
                     // remove the chapter filename
