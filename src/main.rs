@@ -13,7 +13,7 @@ use crate::preprocessor::{GraphvizPreprocessor, PREPROCESSOR_NAME};
 mod preprocessor;
 mod renderer;
 
-pub fn make_app() -> App<'static, 'static> {
+fn make_app() -> App<'static, 'static> {
     App::new(PREPROCESSOR_NAME)
         .about("A mdbook preprocessor which does precisely nothing")
         .subcommand(
