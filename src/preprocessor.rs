@@ -80,7 +80,7 @@ impl<R: GraphvizRenderer> Graphviz<R> {
         let mut graphviz_block_builder: Option<GraphvizBlockBuilder> = None;
         let mut image_index = 0;
 
-        let event_results: Result<Vec<Vec<Event>>> = new_cmark_parser(&chapter.content)
+        let event_results: Result<Vec<Vec<Event>>> = new_cmark_parser(&chapter.content, false)
             .map(|e| {
                 if let Some(mut builder) = graphviz_block_builder.take() {
                     match e {
