@@ -113,7 +113,7 @@ impl<R: GraphvizRenderer> Graphviz<R> {
         let mut graphviz_block_builder: Option<GraphvizBlockBuilder> = None;
         let mut image_index = 0;
 
-        let events = new_cmark_parser(&chapter.content);
+        let events = new_cmark_parser(&chapter.content, false);
         let mut event_futures = Vec::new();
 
         for e in events {
@@ -166,7 +166,7 @@ impl<R: GraphvizRenderer> Graphviz<R> {
             .into_iter()
             .flatten();
 
-        cmark(events, &mut buf, None)?;
+        cmark(events, &mut buf)?;
 
         chapter.content = buf;
 

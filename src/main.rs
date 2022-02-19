@@ -4,7 +4,7 @@ extern crate lazy_static;
 use std::io;
 use std::process;
 
-use clap::{App, Arg, ArgMatches, SubCommand};
+use clap::{Arg, ArgMatches, Command};
 use mdbook::errors::Error;
 use mdbook::preprocess::{CmdPreprocessor, Preprocessor};
 
@@ -13,12 +13,12 @@ use crate::preprocessor::{GraphvizPreprocessor, PREPROCESSOR_NAME};
 mod preprocessor;
 mod renderer;
 
-fn make_app() -> App<'static, 'static> {
-    App::new(PREPROCESSOR_NAME)
+pub fn make_app() -> Command<'static> {
+    Command::new(PREPROCESSOR_NAME)
         .about("A mdbook preprocessor which does precisely nothing")
         .subcommand(
-            SubCommand::with_name("supports")
-                .arg(Arg::with_name("renderer").required(true))
+            Command::new("supports")
+                .arg(Arg::new("renderer").required(true))
                 .about("Check whether a renderer is supported by this preprocessor"),
         )
 }
