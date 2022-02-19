@@ -520,6 +520,41 @@ digraph Test {
         }
     }
 
+    #[tokio::test]
+    async fn skip_draft_chapters() {
+        let draft_chapter = Chapter::new_draft(CHAPTER_NAME, vec![]);
+        let mut book_items = vec![
+            BookItem::Chapter(draft_chapter.clone()),
+            BookItem::Chapter(new_chapter(
+                r#"# Chapter
+```dot process Graph Name
+digraph Test {
+    a -> b
+}
+```
+"#,
+            )),
+        ];
+
+        Graphviz::<NoopRenderer>::new(PathBuf::from("/"))
+            .process_sub_items(&mut book_items)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            book_items,
+            vec![
+                BookItem::Chapter(draft_chapter),
+                BookItem::Chapter(new_chapter(format!(
+                    r#"# Chapter
+
+{}_graph_name_0.generated.svg|"/./book/{}_graph_name_0.generated.svg"|Graph Name|0"#,
+                    NORMALIZED_CHAPTER_NAME, NORMALIZED_CHAPTER_NAME
+                )))
+            ]
+        )
+    }
+
     async fn process_chapter(chapter: Chapter) -> Result<Chapter> {
         Graphviz::<NoopRenderer>::new(PathBuf::from("/"))
             .process_chapter(chapter)
