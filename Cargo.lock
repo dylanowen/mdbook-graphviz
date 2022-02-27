@@ -171,9 +171,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "3.0.4"
+version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d01c9347757e131122b19cd19a05c85805b68c2352a97b623efdc3c295290299"
+checksum = "6d76c22c9b9b215eeb8d016ad3a90417bd13cb24cf8142756e6472445876cab7"
 dependencies = [
  "atty",
  "bitflags",
@@ -798,7 +798,7 @@ dependencies = [
 name = "mdbook-graphviz"
 version = "0.1.4"
 dependencies = [
- "clap 3.0.4",
+ "clap 3.1.1",
  "lazy_static",
  "mdbook",
  "pulldown-cmark",
