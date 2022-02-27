@@ -5,20 +5,28 @@ SHELL:=/bin/bash
 fix:
 	cargo fix --allow-staged
 
-format:
-	cargo fmt
+fmt:
+	cargo fmt --all -- --check
 
 lint:
-	cargo clippy
+	cargo clippy -- -D warnings
 	-cargo audit
 
-build: format lint
+check:
+	cargo check
+
+build:
 	cargo build
 
-test: format
+release:
+	cargo build --release
+
+test:
 	cargo test
 
-install: format lint
+pre-commit: fix fmt lint test release
+
+install:
 	cargo install --force --path .
 
 default: build
