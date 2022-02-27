@@ -158,7 +158,7 @@ impl GraphvizBlockBuilder {
 
         // check if we can have a name at the end of our info string
         let graph_name = if Some(' ') == info_string.chars().nth(INFO_STRING_PREFIX.len()) {
-            &info_string[INFO_STRING_PREFIX.len() + 1..].trim()
+            info_string[INFO_STRING_PREFIX.len() + 1..].trim()
         } else {
             ""
         };
