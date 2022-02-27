@@ -1,6 +1,9 @@
+use core::mem;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 
+use async_recursion::async_recursion;
+use futures::future;
 use mdbook::book::{Book, Chapter};
 use mdbook::errors::Result;
 use mdbook::preprocess::{Preprocessor, PreprocessorContext};
@@ -18,6 +21,7 @@ pub static INFO_STRING_PREFIX: &str = "dot process";
 pub struct GraphvizPreprocessor;
 
 pub struct Graphviz<R: GraphvizRenderer> {
+    src_dir: PathBuf,
     _phantom: PhantomData<*const R>,
 }
 
@@ -35,31 +39,25 @@ impl Preprocessor for GraphvizPreprocessor {
             .unwrap_or(false);
 
         let src_dir = ctx.root.clone().join(&ctx.config.book.src);
-        let mut error = Ok(());
 
-        book.for_each_mut(|item: &mut BookItem| {
-            // only continue editing the book if we don't have any errors
-            if error.is_ok() {
-                if let BookItem::Chapter(ref mut chapter) = item {
-                    let path = match chapter.path.as_ref() {
-                        Some(path) => path,
-                        None => return,
-                    };
-                    let mut full_path = src_dir.join(path);
-
-                    // remove the chapter filename
-                    full_path.pop();
-
-                    error = if !output_to_file {
-                        Graphviz::<CLIGraphviz>::new().process_chapter(chapter, full_path)
-                    } else {
-                        Graphviz::<CLIGraphvizToFile>::new().process_chapter(chapter, full_path)
-                    };
+        // we really only need 1 thread since we're just calling out to the Graphviz CLI
+        tokio::runtime::Builder::new_current_thread()
+            .enable_io()
+            .build()
+            .unwrap()
+            .block_on(async {
+                if !output_to_file {
+                    Graphviz::<CLIGraphviz>::new(src_dir)
+                        .process_sub_items(&mut book.sections)
+                        .await
+                } else {
+                    Graphviz::<CLIGraphvizToFile>::new(src_dir)
+                        .process_sub_items(&mut book.sections)
+                        .await
                 }
-            }
-        });
+            })?;
 
-        error.map(|_| book)
+        Ok(book)
     }
 
     fn supports_renderer(&self, _renderer: &str) -> bool {
@@ -69,73 +67,110 @@ impl Preprocessor for GraphvizPreprocessor {
 }
 
 impl<R: GraphvizRenderer> Graphviz<R> {
-    fn new() -> Graphviz<R> {
-        Graphviz {
+    pub fn new(src_dir: PathBuf) -> Graphviz<R> {
+        Self {
+            src_dir,
             _phantom: PhantomData,
         }
     }
 
-    fn process_chapter(&self, chapter: &mut Chapter, chapter_path: PathBuf) -> Result<()> {
+    #[async_recursion(?Send)]
+    async fn process_sub_items(&'async_recursion self, items: &mut Vec<BookItem>) -> Result<()> {
+        let mut item_futures = Vec::with_capacity(items.len());
+        for item in mem::take(items) {
+            item_futures.push(async {
+                match item {
+                    BookItem::Chapter(chapter) if chapter.path.is_some() => {
+                        self.process_chapter(chapter).await.map(BookItem::Chapter)
+                    }
+                    item => {
+                        // pass through all non-chapters
+                        Ok(item)
+                    }
+                }
+            });
+        }
+
+        *items = future::join_all(item_futures)
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(())
+    }
+
+    #[async_recursion(?Send)]
+    async fn process_chapter(&self, mut chapter: Chapter) -> Result<Chapter> {
+        // make sure to process our chapter sub-items
+        self.process_sub_items(&mut chapter.sub_items).await?;
+
+        // assume we've already filtered out all the draft chapters
+        let mut chapter_path = self.src_dir.join(chapter.path.as_ref().unwrap());
+        // remove the chapter filename
+        chapter_path.pop();
+
         let mut buf = String::with_capacity(chapter.content.len());
         let mut graphviz_block_builder: Option<GraphvizBlockBuilder> = None;
         let mut image_index = 0;
 
-        let event_results: Result<Vec<Vec<Event>>> = new_cmark_parser(&chapter.content, false)
-            .map(|e| {
-                if let Some(mut builder) = graphviz_block_builder.take() {
-                    match e {
-                        Event::Text(ref text) => {
-                            builder.append_code(&**text);
-                            graphviz_block_builder = Some(builder);
+        let events = new_cmark_parser(&chapter.content, false);
+        let mut event_futures = Vec::new();
 
-                            Ok(vec![])
-                        }
-                        Event::End(Tag::CodeBlock(CodeBlockKind::Fenced(ref info_string))) => {
-                            assert_eq!(
-                                Some(0),
-                                (&**info_string).find(INFO_STRING_PREFIX),
-                                "We must close our graphviz block"
-                            );
-
-                            // finish our digraph
-                            let block = builder.build(image_index);
-                            image_index += 1;
-
-                            R::render_graphviz(block)
-                        }
-                        _ => {
-                            graphviz_block_builder = Some(builder);
-
-                            Ok(vec![])
-                        }
+        for e in events {
+            if let Some(mut builder) = graphviz_block_builder.take() {
+                match e {
+                    Event::Text(ref text) => {
+                        builder.append_code(&**text);
+                        graphviz_block_builder = Some(builder);
                     }
-                } else {
-                    match e {
-                        Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(ref info_string)))
-                            if (&**info_string).find(INFO_STRING_PREFIX) == Some(0) =>
-                        {
-                            graphviz_block_builder = Some(GraphvizBlockBuilder::new(
-                                &**info_string,
-                                &chapter.name.clone(),
-                                chapter_path.clone(),
-                            ));
+                    Event::End(Tag::CodeBlock(CodeBlockKind::Fenced(ref info_string))) => {
+                        assert_eq!(
+                            Some(0),
+                            (&**info_string).find(INFO_STRING_PREFIX),
+                            "We must close our graphviz block"
+                        );
 
-                            Ok(vec![])
-                        }
-                        _ => Ok(vec![e]),
+                        // finish our digraph
+                        let block = builder.build(image_index);
+                        image_index += 1;
+
+                        event_futures.push(R::render_graphviz(block));
+                    }
+                    _ => {
+                        graphviz_block_builder = Some(builder);
                     }
                 }
-            })
-            .collect();
+            } else {
+                match e {
+                    Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(ref info_string)))
+                        if (&**info_string).find(INFO_STRING_PREFIX) == Some(0) =>
+                    {
+                        graphviz_block_builder = Some(GraphvizBlockBuilder::new(
+                            &**info_string,
+                            &chapter.name.clone(),
+                            chapter_path.clone(),
+                        ));
+                    }
+                    _ => {
+                        // pass through all events that don't impact our Graphviz block
+                        event_futures.push(Box::pin(async { Ok(vec![e]) }));
+                    }
+                }
+            }
+        }
 
-        // get our result and combine our internal Vecs
-        let events = event_results?.into_iter().flatten();
+        let events = future::join_all(event_futures)
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .flatten();
 
         cmark(events, &mut buf)?;
 
         chapter.content = buf;
 
-        Ok(())
+        Ok(chapter)
     }
 }
 
@@ -194,6 +229,7 @@ impl GraphvizBlockBuilder {
     }
 }
 
+#[derive(Debug)]
 pub struct GraphvizBlock {
     pub graph_name: String,
     pub code: String,
@@ -244,15 +280,20 @@ fn normalize_id(content: &str) -> String {
 
 #[cfg(test)]
 mod test {
+    use async_trait::async_trait;
+
     use super::*;
+
+    use std::time::{Duration, Instant};
 
     static CHAPTER_NAME: &str = "Test Chapter";
     static NORMALIZED_CHAPTER_NAME: &str = "test_chapter";
 
     struct NoopRenderer;
 
+    #[async_trait]
     impl GraphvizRenderer for NoopRenderer {
-        fn render_graphviz<'a>(block: GraphvizBlock) -> Result<Vec<Event<'a>>> {
+        async fn render_graphviz<'a>(block: GraphvizBlock) -> Result<Vec<Event<'a>>> {
             let file_name = block.file_name();
             let output_path = block.output_path();
             let GraphvizBlock {
@@ -265,8 +306,8 @@ mod test {
         }
     }
 
-    #[test]
-    fn only_preprocess_flagged_blocks() {
+    #[tokio::test]
+    async fn only_preprocess_flagged_blocks() {
         let expected = r#"# Chapter
 
 ````dot
@@ -274,67 +315,62 @@ digraph Test {
     a -> b
 }
 ````"#;
-
-        let mut chapter = new_chapter(expected.into());
-
-        process_chapter(&mut chapter).unwrap();
+        let chapter = process_chapter(new_chapter(expected)).await.unwrap();
 
         assert_eq!(chapter.content, expected);
     }
 
-    #[test]
-    fn no_name() {
-        let mut chapter = new_chapter(
+    #[tokio::test]
+    async fn no_name() {
+        let chapter = new_chapter(
             r#"# Chapter
 ```dot process
 digraph Test {
     a -> b
 }
 ```
-"#
-            .into(),
+"#,
         );
 
         let expected = format!(
             r#"# Chapter
 
-{}_0.generated.svg|"./{}_0.generated.svg"||0"#,
+{}_0.generated.svg|"/./book/{}_0.generated.svg"||0"#,
             NORMALIZED_CHAPTER_NAME, NORMALIZED_CHAPTER_NAME
         );
 
-        process_chapter(&mut chapter).unwrap();
+        let chapter = process_chapter(chapter).await.unwrap();
 
         assert_eq!(chapter.content, expected);
     }
 
-    #[test]
-    fn named_blocks() {
-        let mut chapter = new_chapter(
+    #[tokio::test]
+    async fn named_blocks() {
+        let chapter = new_chapter(
             r#"# Chapter
 ```dot process Graph Name
 digraph Test {
     a -> b
 }
 ```
-"#
-            .into(),
+"#,
         );
 
         let expected = format!(
             r#"# Chapter
 
-{}_graph_name_0.generated.svg|"./{}_graph_name_0.generated.svg"|Graph Name|0"#,
+{}_graph_name_0.generated.svg|"/./book/{}_graph_name_0.generated.svg"|Graph Name|0"#,
             NORMALIZED_CHAPTER_NAME, NORMALIZED_CHAPTER_NAME
         );
 
-        process_chapter(&mut chapter).unwrap();
+        let chapter = process_chapter(chapter).await.unwrap();
 
         assert_eq!(chapter.content, expected);
     }
 
-    #[test]
-    fn preserve_escaping() {
-        let mut chapter = new_chapter(
+    #[tokio::test]
+    async fn preserve_escaping() {
+        let chapter = new_chapter(
             r#"# Chapter
 
 *asteriks*
@@ -346,8 +382,7 @@ digraph Test {
     a -> b
 }
 ```
-"#
-            .into(),
+"#,
         );
 
         let expected = format!(
@@ -357,18 +392,18 @@ digraph Test {
 /*asteriks/*
 ( \int x dx = \frac{{x^2}}{{2}} + C)
 
-{}_graph_name_0.generated.svg|"./{}_graph_name_0.generated.svg"|Graph Name|0"#,
+{}_graph_name_0.generated.svg|"/./book/{}_graph_name_0.generated.svg"|Graph Name|0"#,
             NORMALIZED_CHAPTER_NAME, NORMALIZED_CHAPTER_NAME
         );
 
-        process_chapter(&mut chapter).unwrap();
+        let chapter = process_chapter(chapter).await.unwrap();
 
         assert_eq!(chapter.content, expected);
     }
 
-    #[test]
-    fn preserve_tables() {
-        let mut chapter = new_chapter(
+    #[tokio::test]
+    async fn preserve_tables() {
+        let chapter = new_chapter(
             r#"# Chapter
 
 |Tables|Are|Cool|
@@ -382,8 +417,7 @@ digraph Test {
     a -> b
 }
 ```
-"#
-            .into(),
+"#,
         );
 
         let expected = format!(
@@ -395,22 +429,144 @@ digraph Test {
 |col 2 is|centered|$12|
 |col 3 is|right-aligned|$1|
 
-{}_graph_name_0.generated.svg|"./{}_graph_name_0.generated.svg"|Graph Name|0"#,
+{}_graph_name_0.generated.svg|"/./book/{}_graph_name_0.generated.svg"|Graph Name|0"#,
             NORMALIZED_CHAPTER_NAME, NORMALIZED_CHAPTER_NAME
         );
 
-        process_chapter(&mut chapter).unwrap();
+        let chapter = process_chapter(chapter).await.unwrap();
 
         assert_eq!(chapter.content, expected);
     }
 
-    fn process_chapter(chapter: &mut Chapter) -> Result<()> {
-        let graphviz = Graphviz::<NoopRenderer>::new();
-
-        graphviz.process_chapter(chapter, PathBuf::from("./"))
+    const SLEEP_DURATION: Duration = Duration::from_millis(100);
+    struct SleepyRenderer;
+    #[async_trait]
+    impl GraphvizRenderer for SleepyRenderer {
+        async fn render_graphviz<'a>(_block: GraphvizBlock) -> Result<Vec<Event<'a>>> {
+            tokio::time::sleep(SLEEP_DURATION).await;
+            Ok(vec![Event::Text("".into())])
+        }
     }
 
-    fn new_chapter(content: String) -> Chapter {
-        Chapter::new(CHAPTER_NAME, content.into(), PathBuf::from("./"), vec![])
+    /// Test that we are actually running Graphviz concurrently
+    #[tokio::test]
+    async fn concurrent_execution() {
+        const TOTAL_CHAPTERS: usize = 10;
+        let mut chapters = Vec::with_capacity(TOTAL_CHAPTERS);
+        for _ in 0..TOTAL_CHAPTERS {
+            chapters.push(BookItem::Chapter(new_chapter(
+                r#"# Chapter
+```dot process Graph Name
+digraph Test {
+    a -> b
+}
+```
+"#,
+            )));
+        }
+
+        let start = Instant::now();
+        Graphviz::<SleepyRenderer>::new(PathBuf::from("/"))
+            .process_sub_items(&mut chapters)
+            .await
+            .unwrap();
+        let duration = start.elapsed();
+
+        for item in chapters {
+            if let BookItem::Chapter(chapter) = item {
+                // make sure we used the correct renderer
+                assert_eq!(chapter.content, "# Chapter\n\n");
+            } else {
+                panic!("We should only have chapters here");
+            }
+        }
+
+        assert!(
+            duration < SLEEP_DURATION * 2,
+            "{:?} should be less than 2 * {:?} since we expect some variation when running",
+            duration,
+            SLEEP_DURATION
+        );
+    }
+
+    /// Test that we correctly process Chapter sub-items
+    #[tokio::test]
+    async fn chapter_sub_items() {
+        let content = r#"# Chapter
+            
+```dot process Graph Name
+digraph Test {
+    a -> b
+}
+```
+"#;
+        let mut chapter = new_chapter(content);
+        chapter
+            .sub_items
+            .push(BookItem::Chapter(new_chapter(content)));
+
+        let expected = format!(
+            r#"# Chapter
+
+{}_graph_name_0.generated.svg|"/./book/{}_graph_name_0.generated.svg"|Graph Name|0"#,
+            NORMALIZED_CHAPTER_NAME, NORMALIZED_CHAPTER_NAME
+        );
+
+        let mut chapter = process_chapter(chapter).await.unwrap();
+
+        assert_eq!(chapter.content, expected);
+        if let BookItem::Chapter(child_chapter) = chapter.sub_items.remove(0) {
+            assert_eq!(child_chapter.content, expected);
+        }
+    }
+
+    #[tokio::test]
+    async fn skip_draft_chapters() {
+        let draft_chapter = Chapter::new_draft(CHAPTER_NAME, vec![]);
+        let mut book_items = vec![
+            BookItem::Chapter(draft_chapter.clone()),
+            BookItem::Chapter(new_chapter(
+                r#"# Chapter
+```dot process Graph Name
+digraph Test {
+    a -> b
+}
+```
+"#,
+            )),
+        ];
+
+        Graphviz::<NoopRenderer>::new(PathBuf::from("/"))
+            .process_sub_items(&mut book_items)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            book_items,
+            vec![
+                BookItem::Chapter(draft_chapter),
+                BookItem::Chapter(new_chapter(format!(
+                    r#"# Chapter
+
+{}_graph_name_0.generated.svg|"/./book/{}_graph_name_0.generated.svg"|Graph Name|0"#,
+                    NORMALIZED_CHAPTER_NAME, NORMALIZED_CHAPTER_NAME
+                )))
+            ]
+        )
+    }
+
+    async fn process_chapter(chapter: Chapter) -> Result<Chapter> {
+        Graphviz::<NoopRenderer>::new(PathBuf::from("/"))
+            .process_chapter(chapter)
+            .await
+    }
+
+    fn new_chapter<S: ToString>(content: S) -> Chapter {
+        Chapter::new(
+            CHAPTER_NAME,
+            content.to_string(),
+            PathBuf::from("./book/chapter.md"),
+            vec![],
+        )
     }
 }

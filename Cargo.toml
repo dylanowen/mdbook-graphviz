@@ -21,3 +21,11 @@ pulldown-cmark-to-cmark = "10.0"
 lazy_static = "1.4.0"
 regex = "1.5"
 toml = "0.5"
+
+tokio = { version = "1.17", features = ["process"] }
+futures = "0.3"
+async-trait = "0.1"
+async-recursion = "1.0"
+
+[dev-dependencies]
+tokio = { version = "1.17", features = ["process", "time"] }

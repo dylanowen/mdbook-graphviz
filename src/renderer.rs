@@ -1,22 +1,31 @@
 use std::io;
-use std::io::Write;
-use std::process::{Child, Command, Stdio};
+use std::process::Stdio;
+use tokio::process::{Child, Command};
 
+use async_trait::async_trait;
 use mdbook::errors::Result;
 use pulldown_cmark::{Event, LinkType, Tag};
 use regex::Regex;
 
 use crate::preprocessor::GraphvizBlock;
+use tokio::io::AsyncWriteExt;
 
+#[async_trait]
 pub trait GraphvizRenderer {
-    fn render_graphviz<'a>(block: GraphvizBlock) -> Result<Vec<Event<'a>>>;
+    async fn render_graphviz<'a>(block: GraphvizBlock) -> Result<Vec<Event<'a>>>;
 }
 
 pub struct CLIGraphviz;
 
+#[async_trait]
 impl GraphvizRenderer for CLIGraphviz {
-    fn render_graphviz<'a>(GraphvizBlock { code, .. }: GraphvizBlock) -> Result<Vec<Event<'a>>> {
-        let output = call_graphviz(&["-Tsvg"], &code)?.wait_with_output()?;
+    async fn render_graphviz<'a>(
+        GraphvizBlock { code, .. }: GraphvizBlock,
+    ) -> Result<Vec<Event<'a>>> {
+        let output = call_graphviz(&["-Tsvg"], &code)
+            .await?
+            .wait_with_output()
+            .await?;
         if output.status.success() {
             let graph_svg = String::from_utf8(output.stdout)?;
 
@@ -32,8 +41,9 @@ impl GraphvizRenderer for CLIGraphviz {
 
 pub struct CLIGraphvizToFile;
 
+#[async_trait]
 impl GraphvizRenderer for CLIGraphvizToFile {
-    fn render_graphviz<'a>(block: GraphvizBlock) -> Result<Vec<Event<'a>>> {
+    async fn render_graphviz<'a>(block: GraphvizBlock) -> Result<Vec<Event<'a>>> {
         let file_name = block.file_name();
         let output_path = block.output_path();
         let GraphvizBlock {
@@ -44,8 +54,10 @@ impl GraphvizRenderer for CLIGraphvizToFile {
             .to_str()
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Couldn't build output path"))?;
 
-        if call_graphviz(&["-Tsvg", "-o", output_path_str], &code)?
-            .wait()?
+        if call_graphviz(&["-Tsvg", "-o", output_path_str], &code)
+            .await?
+            .wait()
+            .await?
             .success()
         {
             let image_tag = Tag::Image(LinkType::Inline, file_name.into(), graph_name.into());
@@ -61,7 +73,7 @@ impl GraphvizRenderer for CLIGraphvizToFile {
     }
 }
 
-fn call_graphviz(args: &[&str], code: &str) -> Result<Child> {
+async fn call_graphviz(args: &[&str], code: &str) -> Result<Child> {
     let mut child = Command::new("dot")
         .args(args)
         .stdin(Stdio::piped())
@@ -70,7 +82,7 @@ fn call_graphviz(args: &[&str], code: &str) -> Result<Child> {
         .spawn()?;
 
     if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(code.as_bytes())?;
+        stdin.write_all(code.as_bytes()).await?;
     }
 
     Ok(child)
@@ -97,8 +109,8 @@ fn format_output(output: String) -> String {
 mod test {
     use super::*;
 
-    #[test]
-    fn inline_events() {
+    #[tokio::test]
+    async fn inline_events() {
         let code = r#"digraph Test { a -> b }"#;
 
         let block = GraphvizBlock {
@@ -109,7 +121,10 @@ mod test {
             index: 0,
         };
 
-        let mut events = CLIGraphviz::render_graphviz(block).unwrap().into_iter();
+        let mut events = CLIGraphviz::render_graphviz(block)
+            .await
+            .unwrap()
+            .into_iter();
         if let Some(Event::Html(_)) = events.next() {
         } else {
             panic!("Unexpected next event")
