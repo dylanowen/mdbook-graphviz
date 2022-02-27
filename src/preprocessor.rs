@@ -131,7 +131,7 @@ impl<R: GraphvizRenderer> Graphviz<R> {
         // get our result and combine our internal Vecs
         let events = event_results?.into_iter().flatten();
 
-        cmark(events, &mut buf, None)?;
+        cmark(events, &mut buf)?;
 
         chapter.content = buf;
 
