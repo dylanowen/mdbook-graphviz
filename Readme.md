@@ -96,3 +96,26 @@ This `.gitignore` should cover the generated SVG files.
 ```
 *.generated.svg
 ```
+
+## Embedding dot files
+Sometimes you don't want to write dot code, but instead include it from a file:
+
+~~~markdown
+```dot
+{{#include path/to/file.dot}}
+```
+~~~
+
+In this case, you might want to modify the order of preprocessors, so the
+include directives get resolved before it's passed to Graphviz.
+
+In that case, make sure your `[preprocessor.graphviz]` section in the config
+orders itself after `links`:
+
+```toml
+[preprocessor.graphviz]
+after = ["links"]
+```
+
+More information about preprocessors and ordering can be found
+[here](https://rust-lang.github.io/mdBook/format/configuration/preprocessors.html?highlight=preprocessors#require-a-certain-order).
