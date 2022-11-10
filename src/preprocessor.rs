@@ -126,7 +126,7 @@ impl<R: GraphvizRenderer> Graphviz<R> {
                     Event::End(Tag::CodeBlock(CodeBlockKind::Fenced(ref info_string))) => {
                         assert_eq!(
                             Some(0),
-                            (&**info_string).find(INFO_STRING_PREFIX),
+                            (**info_string).find(INFO_STRING_PREFIX),
                             "We must close our graphviz block"
                         );
 
@@ -143,7 +143,7 @@ impl<R: GraphvizRenderer> Graphviz<R> {
             } else {
                 match e {
                     Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(ref info_string)))
-                        if (&**info_string).find(INFO_STRING_PREFIX) == Some(0) =>
+                        if (**info_string).find(INFO_STRING_PREFIX) == Some(0) =>
                     {
                         graphviz_block_builder = Some(GraphvizBlockBuilder::new(
                             &**info_string,
