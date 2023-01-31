@@ -3,13 +3,14 @@ SHELL:=/bin/bash
 .DEFAULT_GOAL := default
 
 fix:
-	cargo fix --allow-staged
+	cargo fix --all-targets --all-features --allow-staged
+	cargo clippy --fix --all-targets --all-features --allow-staged
 
 fmt:
 	cargo fmt --all -- --check
 
 lint:
-	cargo clippy -- -D warnings
+	cargo clippy --all-targets --all-features -- -D warnings
 	-cargo audit
 
 check:

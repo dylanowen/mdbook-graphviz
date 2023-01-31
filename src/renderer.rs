@@ -102,7 +102,7 @@ fn format_output(output: String) -> String {
     let output = NEW_LINE_TAGS_RE.replace_all(&output, "><");
     let output = output.trim();
 
-    format!("<div>{}</div>", output)
+    format!("<div>{output}</div>")
 }
 
 #[cfg(test)]

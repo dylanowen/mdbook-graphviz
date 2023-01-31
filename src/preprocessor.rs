@@ -255,7 +255,7 @@ impl GraphvizBlock {
             )
         };
 
-        format!("{}.svg", image_name)
+        format!("{image_name}.svg")
     }
 
     pub fn output_path(&self) -> PathBuf {
@@ -301,7 +301,7 @@ mod test {
             } = block;
 
             Ok(vec![Event::Text(
-                format!("{}|{:?}|{}|{}", file_name, output_path, graph_name, index).into(),
+                format!("{file_name}|{output_path:?}|{graph_name}|{index}").into(),
             )])
         }
     }
@@ -335,8 +335,7 @@ digraph Test {
         let expected = format!(
             r#"# Chapter
 
-{}_0.generated.svg|"/./book/{}_0.generated.svg"||0"#,
-            NORMALIZED_CHAPTER_NAME, NORMALIZED_CHAPTER_NAME
+{NORMALIZED_CHAPTER_NAME}_0.generated.svg|"/./book/{NORMALIZED_CHAPTER_NAME}_0.generated.svg"||0"#
         );
 
         let chapter = process_chapter(chapter).await.unwrap();
@@ -359,8 +358,7 @@ digraph Test {
         let expected = format!(
             r#"# Chapter
 
-{}_graph_name_0.generated.svg|"/./book/{}_graph_name_0.generated.svg"|Graph Name|0"#,
-            NORMALIZED_CHAPTER_NAME, NORMALIZED_CHAPTER_NAME
+{NORMALIZED_CHAPTER_NAME}_graph_name_0.generated.svg|"/./book/{NORMALIZED_CHAPTER_NAME}_graph_name_0.generated.svg"|Graph Name|0"#
         );
 
         let chapter = process_chapter(chapter).await.unwrap();
@@ -392,8 +390,7 @@ digraph Test {
 /*asteriks/*
 ( \int x dx = \frac{{x^2}}{{2}} + C)
 
-{}_graph_name_0.generated.svg|"/./book/{}_graph_name_0.generated.svg"|Graph Name|0"#,
-            NORMALIZED_CHAPTER_NAME, NORMALIZED_CHAPTER_NAME
+{NORMALIZED_CHAPTER_NAME}_graph_name_0.generated.svg|"/./book/{NORMALIZED_CHAPTER_NAME}_graph_name_0.generated.svg"|Graph Name|0"#
         );
 
         let chapter = process_chapter(chapter).await.unwrap();
@@ -429,8 +426,7 @@ digraph Test {
 |col 2 is|centered|$12|
 |col 3 is|right-aligned|$1|
 
-{}_graph_name_0.generated.svg|"/./book/{}_graph_name_0.generated.svg"|Graph Name|0"#,
-            NORMALIZED_CHAPTER_NAME, NORMALIZED_CHAPTER_NAME
+{NORMALIZED_CHAPTER_NAME}_graph_name_0.generated.svg|"/./book/{NORMALIZED_CHAPTER_NAME}_graph_name_0.generated.svg"|Graph Name|0"#
         );
 
         let chapter = process_chapter(chapter).await.unwrap();
@@ -483,9 +479,7 @@ digraph Test {
 
         assert!(
             duration < SLEEP_DURATION * 2,
-            "{:?} should be less than 2 * {:?} since we expect some variation when running",
-            duration,
-            SLEEP_DURATION
+            "{duration:?} should be less than 2 * {SLEEP_DURATION:?} since we expect some variation when running"
         );
     }
 
@@ -508,8 +502,7 @@ digraph Test {
         let expected = format!(
             r#"# Chapter
 
-{}_graph_name_0.generated.svg|"/./book/{}_graph_name_0.generated.svg"|Graph Name|0"#,
-            NORMALIZED_CHAPTER_NAME, NORMALIZED_CHAPTER_NAME
+{NORMALIZED_CHAPTER_NAME}_graph_name_0.generated.svg|"/./book/{NORMALIZED_CHAPTER_NAME}_graph_name_0.generated.svg"|Graph Name|0"#
         );
 
         let mut chapter = process_chapter(chapter).await.unwrap();
@@ -548,8 +541,7 @@ digraph Test {
                 BookItem::Chapter(new_chapter(format!(
                     r#"# Chapter
 
-{}_graph_name_0.generated.svg|"/./book/{}_graph_name_0.generated.svg"|Graph Name|0"#,
-                    NORMALIZED_CHAPTER_NAME, NORMALIZED_CHAPTER_NAME
+{NORMALIZED_CHAPTER_NAME}_graph_name_0.generated.svg|"/./book/{NORMALIZED_CHAPTER_NAME}_graph_name_0.generated.svg"|Graph Name|0"#
                 )))
             ]
         )
