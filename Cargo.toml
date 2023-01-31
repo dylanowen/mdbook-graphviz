@@ -7,7 +7,7 @@ readme = "Readme.md"
 license = "MPL-2.0"
 homepage = "https://github.com/dylanowen/mdbook-graphviz"
 repository = "https://github.com/dylanowen/mdbook-graphviz"
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
