@@ -79,7 +79,7 @@ impl<R: GraphvizRenderer> Graphviz<R> {
         for item in mem::take(items) {
             item_futures.push(async {
                 match item {
-                    BookItem::Chapter(chapter) if chapter.path.is_some() => {
+                    BookItem::Chapter(chapter) => {
                         self.process_chapter(chapter).await.map(BookItem::Chapter)
                     }
                     item => {
@@ -102,6 +102,10 @@ impl<R: GraphvizRenderer> Graphviz<R> {
     async fn process_chapter(&self, mut chapter: Chapter) -> Result<Chapter> {
         // make sure to process our chapter sub-items
         self.process_sub_items(&mut chapter.sub_items).await?;
+
+        if chapter.path.is_none() {
+            return Ok(chapter);
+        }
 
         // assume we've already filtered out all the draft chapters
         let mut chapter_path = self.src_dir.join(chapter.path.as_ref().unwrap());
