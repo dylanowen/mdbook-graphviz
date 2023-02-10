@@ -11,7 +11,6 @@ use mdbook::utils::new_cmark_parser;
 use mdbook::BookItem;
 use pulldown_cmark::{CodeBlockKind, Event, Tag};
 use pulldown_cmark_to_cmark::cmark;
-use toml::Value;
 
 use crate::renderer::{CLIGraphviz, CLIGraphvizToFile, GraphvizRenderer};
 
@@ -35,7 +34,7 @@ impl Preprocessor for GraphvizPreprocessor {
             .config
             .get_preprocessor(self.name())
             .and_then(|t| t.get("output-to-file"))
-            .and_then(Value::as_bool)
+            .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
         let src_dir = ctx.root.clone().join(&ctx.config.book.src);
@@ -487,7 +486,7 @@ digraph Test {
     #[tokio::test]
     async fn chapter_sub_items() {
         let content = r#"# Chapter
-            
+
 ```dot process Graph Name
 digraph Test {
     a -> b
