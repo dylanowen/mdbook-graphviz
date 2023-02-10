@@ -957,7 +957,7 @@ dependencies = [
 
 [[package]]
 name = "mdbook-graphviz"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "async-recursion",
  "async-trait",
