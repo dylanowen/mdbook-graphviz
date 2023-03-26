@@ -7,9 +7,10 @@ fix:
 	cargo clippy --fix --all-targets --all-features --allow-staged
 
 fmt:
-	cargo fmt --all -- --check
+	cargo fmt --all
 
 lint:
+	cargo fmt --all -- --check
 	cargo clippy --all-targets --all-features -- -D warnings
 	-cargo audit
 
