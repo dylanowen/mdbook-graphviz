@@ -4,35 +4,48 @@ extern crate lazy_static;
 use std::io;
 use std::process;
 
-use clap::{Arg, ArgMatches, Command};
+use clap::{Parser, Subcommand};
 use mdbook::errors::Error;
 use mdbook::preprocess::{CmdPreprocessor, Preprocessor};
 
-use crate::preprocessor::{GraphvizPreprocessor, PREPROCESSOR_NAME};
+use crate::preprocessor::GraphvizPreprocessor;
 
 mod preprocessor;
 mod renderer;
 
-pub fn make_app() -> Command<'static> {
-    Command::new(PREPROCESSOR_NAME)
-        .about("A mdbook preprocessor which does precisely nothing")
-        .subcommand(
-            Command::new("supports")
-                .arg(Arg::new("renderer").required(true))
-                .about("Check whether a renderer is supported by this preprocessor"),
-        )
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Check whether a renderer is supported by this preprocessor
+    Supports { renderer: String },
 }
 
 fn main() {
-    let matches = make_app().get_matches();
+    let cli = Cli::parse();
 
     let preprocessor = GraphvizPreprocessor;
 
-    if let Some(sub_args) = matches.subcommand_matches("supports") {
-        handle_supports(&preprocessor, sub_args);
-    } else if let Err(e) = handle_preprocessing(&preprocessor) {
-        eprintln!("{e}");
-        process::exit(1);
+    match cli.command {
+        None => {
+            if let Err(e) = handle_preprocessing(&preprocessor) {
+                eprintln!("{e}");
+                process::exit(1);
+            }
+        }
+        Some(Commands::Supports { renderer }) => {
+            // Signal whether the renderer is supported by exiting with 1 or 0.
+            if preprocessor.supports_renderer(&renderer) {
+                process::exit(0);
+            } else {
+                process::exit(1);
+            }
+        }
     }
 }
 
@@ -40,8 +53,7 @@ fn handle_preprocessing(pre: &dyn Preprocessor) -> Result<(), Error> {
     let (ctx, book) = CmdPreprocessor::parse_input(io::stdin())?;
 
     if ctx.mdbook_version != mdbook::MDBOOK_VERSION {
-        // We should probably use the `semver` crate to check compatibility
-        // here...
+        // We should probably use the `semver` crate to check compatibility here...
         eprintln!(
             "Warning: The {} plugin was built against version {} of mdbook, \
              but we're being called from version {}",
@@ -55,18 +67,4 @@ fn handle_preprocessing(pre: &dyn Preprocessor) -> Result<(), Error> {
     serde_json::to_writer(io::stdout(), &processed_book)?;
 
     Ok(())
-}
-
-fn handle_supports(pre: &dyn Preprocessor, sub_args: &ArgMatches) -> ! {
-    let renderer = sub_args
-        .get_one::<String>("renderer")
-        .expect("Required argument");
-    let supported = pre.supports_renderer(renderer);
-
-    // Signal whether the renderer is supported by exiting with 1 or 0.
-    if supported {
-        process::exit(0);
-    } else {
-        process::exit(1);
-    }
 }
