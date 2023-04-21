@@ -19,7 +19,7 @@ pulldown-cmark = "0.9"
 pulldown-cmark-to-cmark = "10.0"
 
 lazy_static = "1.4.0"
-regex = "1.7"
+regex = "1.8"
 toml = "0.7"
 
 tokio = { version = "1.27", features = ["process"] }
