@@ -372,7 +372,7 @@ digraph Test {
     #[tokio::test]
     async fn preserve_escaping() {
         let chapter = new_chapter(
-            r#"# Chapter
+            r"# Chapter
 
 *asteriks*
 /*asteriks/*
@@ -383,7 +383,7 @@ digraph Test {
     a -> b
 }
 ```
-"#,
+",
         );
 
         let expected = format!(
