@@ -1,6 +1,4 @@
-SHELL:=/bin/bash
-
-.DEFAULT_GOAL := default
+default: build
 
 fix:
 	cargo fix --all-targets --all-features --allow-staged
@@ -30,8 +28,6 @@ pre-commit: fix fmt lint test release
 
 install:
 	cargo install --force --path .
-
-default: build
 
 clean:
 	cargo clean
