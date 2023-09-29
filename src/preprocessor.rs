@@ -302,7 +302,10 @@ mod test {
 
     #[async_trait]
     impl GraphvizRenderer for NoopRenderer {
-        async fn render_graphviz<'a>(_args: &'a [&'a str], block: GraphvizBlock) -> Result<Vec<Event<'a>>> {
+        async fn render_graphviz<'a>(
+            _args: &'a [&'a str],
+            block: GraphvizBlock,
+        ) -> Result<Vec<Event<'a>>> {
             let file_name = block.file_name();
             let output_path = block.output_path();
             let GraphvizBlock {
@@ -447,7 +450,10 @@ digraph Test {
     struct SleepyRenderer;
     #[async_trait]
     impl GraphvizRenderer for SleepyRenderer {
-        async fn render_graphviz<'a>(_args: &'a [&'a str], _block: GraphvizBlock) -> Result<Vec<Event<'a>>> {
+        async fn render_graphviz<'a>(
+            _args: &'a [&'a str],
+            _block: GraphvizBlock,
+        ) -> Result<Vec<Event<'a>>> {
             tokio::time::sleep(SLEEP_DURATION).await;
             Ok(vec![Event::Text("".into())])
         }
