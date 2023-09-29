@@ -19,7 +19,8 @@ pub static INFO_STRING_PREFIX: &str = "dot process";
 
 pub struct GraphvizPreprocessor;
 
-pub struct Graphviz<R: GraphvizRenderer> {
+pub struct Graphviz<'a, R: GraphvizRenderer> {
+    args: &'a [&'a str],
     src_dir: PathBuf,
     _phantom: PhantomData<*const R>,
 }
@@ -30,12 +31,16 @@ impl Preprocessor for GraphvizPreprocessor {
     }
 
     fn run(&self, ctx: &PreprocessorContext, mut book: Book) -> Result<Book> {
-        let output_to_file = ctx
-            .config
-            .get_preprocessor(self.name())
+        let preprocessor_config = ctx.config.get_preprocessor(self.name());
+        let output_to_file = preprocessor_config
             .and_then(|t| t.get("output-to-file"))
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
+        let arguments = preprocessor_config
+            .and_then(|t| t.get("arguments"))
+            .and_then(|v| v.as_array())
+            .map(|a| a.iter().filter_map(|v| v.as_str()).collect())
+            .unwrap_or(vec!["-Tsvg"]);
 
         let src_dir = ctx.root.clone().join(&ctx.config.book.src);
 
@@ -46,11 +51,11 @@ impl Preprocessor for GraphvizPreprocessor {
             .unwrap()
             .block_on(async {
                 if !output_to_file {
-                    Graphviz::<CLIGraphviz>::new(src_dir)
+                    Graphviz::<CLIGraphviz>::new(&arguments, src_dir)
                         .process_sub_items(&mut book.sections)
                         .await
                 } else {
-                    Graphviz::<CLIGraphvizToFile>::new(src_dir)
+                    Graphviz::<CLIGraphvizToFile>::new(&arguments, src_dir)
                         .process_sub_items(&mut book.sections)
                         .await
                 }
@@ -65,9 +70,10 @@ impl Preprocessor for GraphvizPreprocessor {
     }
 }
 
-impl<R: GraphvizRenderer> Graphviz<R> {
-    pub fn new(src_dir: PathBuf) -> Graphviz<R> {
+impl<'b, R: GraphvizRenderer> Graphviz<'b, R> {
+    pub fn new<'a: 'b>(args: &'a [&'a str], src_dir: PathBuf) -> Graphviz<'b, R> {
         Self {
+            args,
             src_dir,
             _phantom: PhantomData,
         }
@@ -137,7 +143,7 @@ impl<R: GraphvizRenderer> Graphviz<R> {
                         let block = builder.build(image_index);
                         image_index += 1;
 
-                        event_futures.push(R::render_graphviz(block));
+                        event_futures.push(R::render_graphviz(self.args, block));
                     }
                     _ => {
                         graphviz_block_builder = Some(builder);
@@ -296,7 +302,7 @@ mod test {
 
     #[async_trait]
     impl GraphvizRenderer for NoopRenderer {
-        async fn render_graphviz<'a>(block: GraphvizBlock) -> Result<Vec<Event<'a>>> {
+        async fn render_graphviz<'a>(_args: &'a [&'a str], block: GraphvizBlock) -> Result<Vec<Event<'a>>> {
             let file_name = block.file_name();
             let output_path = block.output_path();
             let GraphvizBlock {
@@ -441,7 +447,7 @@ digraph Test {
     struct SleepyRenderer;
     #[async_trait]
     impl GraphvizRenderer for SleepyRenderer {
-        async fn render_graphviz<'a>(_block: GraphvizBlock) -> Result<Vec<Event<'a>>> {
+        async fn render_graphviz<'a>(_args: &'a [&'a str], _block: GraphvizBlock) -> Result<Vec<Event<'a>>> {
             tokio::time::sleep(SLEEP_DURATION).await;
             Ok(vec![Event::Text("".into())])
         }
@@ -465,7 +471,7 @@ digraph Test {
         }
 
         let start = Instant::now();
-        Graphviz::<SleepyRenderer>::new(PathBuf::from("/"))
+        Graphviz::<SleepyRenderer>::new(&[], PathBuf::from("/"))
             .process_sub_items(&mut chapters)
             .await
             .unwrap();
@@ -532,7 +538,7 @@ digraph Test {
             )),
         ];
 
-        Graphviz::<NoopRenderer>::new(PathBuf::from("/"))
+        Graphviz::<NoopRenderer>::new(&[], PathBuf::from("/"))
             .process_sub_items(&mut book_items)
             .await
             .unwrap();
@@ -551,7 +557,7 @@ digraph Test {
     }
 
     async fn process_chapter(chapter: Chapter) -> Result<Chapter> {
-        Graphviz::<NoopRenderer>::new(PathBuf::from("/"))
+        Graphviz::<NoopRenderer>::new(&[], PathBuf::from("/"))
             .process_chapter(chapter)
             .await
     }
