@@ -658,9 +658,9 @@ dependencies = [
 
 [[package]]
 name = "h2"
-version = "0.3.19"
+version = "0.3.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d357c7ae988e7d2182f7d7871d0b963962420b0678b0997ce7de72001aeab782"
+checksum = "bb2c4422095b67ee78da96fbb51a4cc413b3b25883c7717ff7ca1ab31022c9c9"
 dependencies = [
  "bytes",
  "fnv",
@@ -668,7 +668,7 @@ dependencies = [
  "futures-sink",
  "futures-util",
  "http",
- "indexmap 1.9.2",
+ "indexmap",
  "slab",
  "tokio",
  "tokio-util",
@@ -688,12 +688,6 @@ dependencies = [
  "serde_json",
  "thiserror",
 ]
-
-[[package]]
-name = "hashbrown"
-version = "0.12.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
 
 [[package]]
 name = "hashbrown"
@@ -878,22 +872,12 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "1.9.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1885e79c1fc4b10f0e172c475f458b7f7b93061064d98c3293e98c5ba0c8b399"
-dependencies = [
- "autocfg",
- "hashbrown 0.12.3",
-]
-
-[[package]]
-name = "indexmap"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d5477fe2230a79769d8dc68e0eabf5437907c0457a5614a9e8dddb67f65eb65d"
 dependencies = [
  "equivalent",
- "hashbrown 0.14.0",
+ "hashbrown",
 ]
 
 [[package]]
@@ -1989,7 +1973,7 @@ version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ff63e60a958cefbb518ae1fd6566af80d9d4be430a33f3723dfc47d1d411d95"
 dependencies = [
- "indexmap 2.0.0",
+ "indexmap",
  "serde",
  "serde_spanned",
  "toml_datetime",
