@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # Install graphviz
-      - uses: ts-graphviz/setup-graphviz@v1
+      - uses: ts-graphviz/setup-graphviz@v2
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
