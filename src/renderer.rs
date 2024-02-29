@@ -12,7 +12,10 @@ use tokio::io::AsyncWriteExt;
 
 #[async_trait]
 pub trait GraphvizRenderer {
-    async fn render_graphviz<'a>(block: GraphvizBlock) -> Result<Vec<Event<'a>>>;
+    async fn render_graphviz<'a>(
+        args: &'a [&'a str],
+        block: GraphvizBlock,
+    ) -> Result<Vec<Event<'a>>>;
 }
 
 pub struct CLIGraphviz;
@@ -20,12 +23,10 @@ pub struct CLIGraphviz;
 #[async_trait]
 impl GraphvizRenderer for CLIGraphviz {
     async fn render_graphviz<'a>(
+        args: &'a [&'a str],
         GraphvizBlock { code, .. }: GraphvizBlock,
     ) -> Result<Vec<Event<'a>>> {
-        let output = call_graphviz(&["-Tsvg"], &code)
-            .await?
-            .wait_with_output()
-            .await?;
+        let output = call_graphviz(args, &code).await?.wait_with_output().await?;
         if output.status.success() {
             let graph_svg = String::from_utf8(output.stdout)?;
 
@@ -43,7 +44,10 @@ pub struct CLIGraphvizToFile;
 
 #[async_trait]
 impl GraphvizRenderer for CLIGraphvizToFile {
-    async fn render_graphviz<'a>(block: GraphvizBlock) -> Result<Vec<Event<'a>>> {
+    async fn render_graphviz<'a>(
+        args: &'a [&'a str],
+        block: GraphvizBlock,
+    ) -> Result<Vec<Event<'a>>> {
         let file_name = block.file_name();
         let output_path = block.output_path();
         let GraphvizBlock {
@@ -54,7 +58,7 @@ impl GraphvizRenderer for CLIGraphvizToFile {
             .to_str()
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Couldn't build output path"))?;
 
-        if call_graphviz(&["-Tsvg", "-o", output_path_str], &code)
+        if call_graphviz(&[args, &["-o", output_path_str]].concat(), &code)
             .await?
             .wait()
             .await?
@@ -121,7 +125,7 @@ mod test {
             index: 0,
         };
 
-        let mut events = CLIGraphviz::render_graphviz(block)
+        let mut events = CLIGraphviz::render_graphviz(&["-Tsvg"], block)
             .await
             .unwrap()
             .into_iter();
