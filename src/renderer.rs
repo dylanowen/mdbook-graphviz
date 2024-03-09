@@ -60,7 +60,7 @@ impl GraphvizRenderer for CLIGraphvizToFile {
             .await?
             .success()
         {
-            let mut graph_name_id = graph_name.replace(" ", "-");
+            let mut graph_name_id = graph_name.replace(' ', "-");
             graph_name_id.make_ascii_lowercase();
             let image_tag = Tag::Image {
                 link_type: LinkType::Inline,
