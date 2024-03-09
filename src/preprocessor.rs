@@ -9,7 +9,7 @@ use mdbook::errors::Result;
 use mdbook::preprocess::{Preprocessor, PreprocessorContext};
 use mdbook::utils::new_cmark_parser;
 use mdbook::BookItem;
-use pulldown_cmark::{CodeBlockKind, Event, Tag};
+use pulldown_cmark::{CodeBlockKind, Event, Tag, TagEnd};
 use pulldown_cmark_to_cmark::cmark;
 
 use crate::renderer::{CLIGraphviz, CLIGraphvizToFile, GraphvizRenderer};
@@ -60,7 +60,8 @@ impl Preprocessor for GraphvizPreprocessor {
     }
 
     fn supports_renderer(&self, _renderer: &str) -> bool {
-        // since we're just outputting markdown images or inline html, this "should" support any renderer
+        // since we're just outputting markdown images or inline html, this "should"
+        // support any renderer
         true
     }
 }
@@ -126,13 +127,7 @@ impl<R: GraphvizRenderer> Graphviz<R> {
                         builder.append_code(&**text);
                         graphviz_block_builder = Some(builder);
                     }
-                    Event::End(Tag::CodeBlock(CodeBlockKind::Fenced(ref info_string))) => {
-                        assert_eq!(
-                            Some(0),
-                            (**info_string).find(INFO_STRING_PREFIX),
-                            "We must close our graphviz block"
-                        );
-
+                    Event::End(TagEnd::CodeBlock) => {
                         // finish our digraph
                         let block = builder.build(image_index);
                         image_index += 1;

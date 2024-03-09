@@ -60,11 +60,19 @@ impl GraphvizRenderer for CLIGraphvizToFile {
             .await?
             .success()
         {
-            let image_tag = Tag::Image(LinkType::Inline, file_name.into(), graph_name.into());
+            let mut graph_name_id = graph_name.replace(" ", "-");
+            graph_name_id.make_ascii_lowercase();
+            let image_tag = Tag::Image {
+                link_type: LinkType::Inline,
+                dest_url: file_name.into(),
+                title: graph_name.into(),
+                id: graph_name_id.into(),
+            };
+            let image_tag_end = image_tag.to_end();
 
             Ok(vec![
-                Event::Start(image_tag.clone()),
-                Event::End(image_tag),
+                Event::Start(image_tag),
+                Event::End(image_tag_end),
                 Event::Text("\n\n".into()),
             ])
         } else {
@@ -98,7 +106,8 @@ fn format_output(output: String) -> String {
     // yes yes: https://stackoverflow.com/a/1732454 ZA̡͊͠͝LGΌ and such
     let output = DOCTYPE_RE.replace(&output, "");
     let output = XML_TAG_RE.replace(&output, "");
-    // remove newlines between our tags to help commonmark determine the full set of HTML
+    // remove newlines between our tags to help commonmark determine the full set of
+    // HTML
     let output = NEW_LINE_TAGS_RE.replace_all(&output, "><");
     let output = output.trim();
 
