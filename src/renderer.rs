@@ -4,7 +4,7 @@ use tokio::process::{Child, Command};
 
 use async_trait::async_trait;
 use mdbook::errors::Result;
-use pulldown_cmark::{Event, LinkType, Tag};
+use pulldown_cmark::{Event, LinkType, Tag, TagEnd};
 use regex::Regex;
 
 use crate::preprocessor::GraphvizBlock;
@@ -64,11 +64,16 @@ impl GraphvizRenderer for CLIGraphvizToFile {
             .await?
             .success()
         {
-            let image_tag = Tag::Image(LinkType::Inline, file_name.into(), graph_name.into());
+            let image_tag = Tag::Image {
+                link_type: LinkType::Inline,
+                dest_url: file_name.into(),
+                title: graph_name.into(),
+                id: "".into(),
+            };
 
             Ok(vec![
-                Event::Start(image_tag.clone()),
-                Event::End(image_tag),
+                Event::Start(image_tag),
+                Event::End(TagEnd::Image),
                 Event::Text("\n\n".into()),
             ])
         } else {
@@ -97,6 +102,7 @@ fn format_output(output: String) -> String {
         static ref DOCTYPE_RE: Regex = Regex::new(r"<!DOCTYPE [^>]+>").unwrap();
         static ref XML_TAG_RE: Regex = Regex::new(r"<\?xml [^>]+\?>").unwrap();
         static ref NEW_LINE_TAGS_RE: Regex = Regex::new(r">\s+<").unwrap();
+        static ref NEWLINES_RE: Regex = Regex::new(r"\n").unwrap();
     }
 
     // yes yes: https://stackoverflow.com/a/1732454 ZA̡͊͠͝LGΌ and such
@@ -104,6 +110,8 @@ fn format_output(output: String) -> String {
     let output = XML_TAG_RE.replace(&output, "");
     // remove newlines between our tags to help commonmark determine the full set of HTML
     let output = NEW_LINE_TAGS_RE.replace_all(&output, "><");
+    // remove explicit newlines as they won't be preserved and break commonmark parsing
+    let output = NEWLINES_RE.replace_all(&output, "");
     let output = output.trim();
 
     format!("<div>{output}</div>")
