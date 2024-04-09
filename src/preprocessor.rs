@@ -9,7 +9,7 @@ use mdbook::errors::Result;
 use mdbook::preprocess::{Preprocessor, PreprocessorContext};
 use mdbook::utils::new_cmark_parser;
 use mdbook::BookItem;
-use pulldown_cmark::{CodeBlockKind, Event, Tag};
+use pulldown_cmark::{CodeBlockKind::Fenced, Event, Tag, TagEnd};
 use pulldown_cmark_to_cmark::cmark;
 
 use crate::renderer::{CLIGraphviz, CLIGraphvizToFile, GraphvizRenderer};
@@ -123,16 +123,10 @@ impl<R: GraphvizRenderer> Graphviz<R> {
             if let Some(mut builder) = graphviz_block_builder.take() {
                 match e {
                     Event::Text(ref text) => {
-                        builder.append_code(&**text);
+                        builder.append_code(text.to_string());
                         graphviz_block_builder = Some(builder);
                     }
-                    Event::End(Tag::CodeBlock(CodeBlockKind::Fenced(ref info_string))) => {
-                        assert_eq!(
-                            Some(0),
-                            (**info_string).find(INFO_STRING_PREFIX),
-                            "We must close our graphviz block"
-                        );
-
+                    Event::End(TagEnd::CodeBlock) => {
                         // finish our digraph
                         let block = builder.build(image_index);
                         image_index += 1;
@@ -145,12 +139,12 @@ impl<R: GraphvizRenderer> Graphviz<R> {
                 }
             } else {
                 match e {
-                    Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(ref info_string)))
-                        if (**info_string).find(INFO_STRING_PREFIX) == Some(0) =>
+                    Event::Start(Tag::CodeBlock(Fenced(info_string)))
+                        if info_string.find(INFO_STRING_PREFIX) == Some(0) =>
                     {
                         graphviz_block_builder = Some(GraphvizBlockBuilder::new(
-                            &**info_string,
-                            &chapter.name.clone(),
+                            info_string.to_string(),
+                            chapter.name.clone(),
                             chapter_path.clone(),
                         ));
                     }
