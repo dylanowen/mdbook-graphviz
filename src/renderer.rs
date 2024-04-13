@@ -213,8 +213,7 @@ mod test {
         };
 
         let config = GraphvizRendererConfig {
-            link_to_file: true,
-            ..GraphvizRendererConfig::default()
+            link_to_file: true
         };
         let mut events = CLIGraphvizToFile::render_graphviz(block, &config)
             .await
