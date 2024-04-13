@@ -212,9 +212,7 @@ mod test {
             index: 0,
         };
 
-        let config = GraphvizRendererConfig {
-            link_to_file: true
-        };
+        let config = GraphvizRendererConfig { link_to_file: true };
         let mut events = CLIGraphvizToFile::render_graphviz(block, &config)
             .await
             .expect("Expect rendering to succeed")
