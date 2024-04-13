@@ -7,19 +7,14 @@ use mdbook::errors::Result;
 use pulldown_cmark::{Event, LinkType, Tag, TagEnd};
 use regex::Regex;
 
-use crate::preprocessor::GraphvizBlock;
+use crate::preprocessor::{GraphvizBlock, GraphvizConfig};
 use tokio::io::AsyncWriteExt;
-
-#[derive(Default)]
-pub struct GraphvizRendererConfig {
-    pub link_to_file: bool,
-}
 
 #[async_trait]
 pub trait GraphvizRenderer {
     async fn render_graphviz<'a>(
         block: GraphvizBlock,
-        _config: &GraphvizRendererConfig,
+        _config: &GraphvizConfig,
     ) -> Result<Vec<Event<'a>>>;
 }
 
@@ -29,7 +24,7 @@ pub struct CLIGraphviz;
 impl GraphvizRenderer for CLIGraphviz {
     async fn render_graphviz<'a>(
         GraphvizBlock { code, .. }: GraphvizBlock,
-        _config: &GraphvizRendererConfig,
+        _config: &GraphvizConfig,
     ) -> Result<Vec<Event<'a>>> {
         let output = call_graphviz(&["-Tsvg"], &code)
             .await?
@@ -54,7 +49,7 @@ pub struct CLIGraphvizToFile;
 impl GraphvizRenderer for CLIGraphvizToFile {
     async fn render_graphviz<'a>(
         block: GraphvizBlock,
-        config: &GraphvizRendererConfig,
+        config: &GraphvizConfig,
     ) -> Result<Vec<Event<'a>>> {
         let file_name = block.file_name();
         let output_path = block.output_path();
@@ -156,7 +151,7 @@ mod test {
             index: 0,
         };
 
-        let config = GraphvizRendererConfig::default();
+        let config = GraphvizConfig::default();
         let mut events = CLIGraphviz::render_graphviz(block, &config)
             .await
             .unwrap()
@@ -181,7 +176,7 @@ mod test {
             index: 0,
         };
 
-        let config = GraphvizRendererConfig::default();
+        let config = GraphvizConfig::default();
         let mut events = CLIGraphvizToFile::render_graphviz(block, &config)
             .await
             .expect("Expect rendering to succeed")
@@ -212,7 +207,7 @@ mod test {
             index: 0,
         };
 
-        let config = GraphvizRendererConfig { link_to_file: true };
+        let config = GraphvizConfig { link_to_file: true, ..GraphvizConfig::default() };
         let mut events = CLIGraphvizToFile::render_graphviz(block, &config)
             .await
             .expect("Expect rendering to succeed")
