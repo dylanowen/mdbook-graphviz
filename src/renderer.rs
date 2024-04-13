@@ -10,9 +10,14 @@ use regex::Regex;
 use crate::preprocessor::GraphvizBlock;
 use tokio::io::AsyncWriteExt;
 
+#[derive(Default)]
+pub struct GraphvizRendererConfig {
+    pub link_to_file: bool,
+}
+
 #[async_trait]
 pub trait GraphvizRenderer {
-    async fn render_graphviz<'a>(block: GraphvizBlock) -> Result<Vec<Event<'a>>>;
+    async fn render_graphviz<'a>(block: GraphvizBlock, _config: &GraphvizRendererConfig) -> Result<Vec<Event<'a>>>;
 }
 
 pub struct CLIGraphviz;
@@ -21,6 +26,7 @@ pub struct CLIGraphviz;
 impl GraphvizRenderer for CLIGraphviz {
     async fn render_graphviz<'a>(
         GraphvizBlock { code, .. }: GraphvizBlock,
+        _config: &GraphvizRendererConfig,
     ) -> Result<Vec<Event<'a>>> {
         let output = call_graphviz(&["-Tsvg"], &code)
             .await?
@@ -43,7 +49,10 @@ pub struct CLIGraphvizToFile;
 
 #[async_trait]
 impl GraphvizRenderer for CLIGraphvizToFile {
-    async fn render_graphviz<'a>(block: GraphvizBlock) -> Result<Vec<Event<'a>>> {
+    async fn render_graphviz<'a>(
+        block: GraphvizBlock,
+        config: &GraphvizRendererConfig
+    ) -> Result<Vec<Event<'a>>> {
         let file_name = block.file_name();
         let output_path = block.output_path();
         let GraphvizBlock {
@@ -60,6 +69,18 @@ impl GraphvizRenderer for CLIGraphvizToFile {
             .await?
             .success()
         {
+            let mut nodes = vec![];
+
+            if config.link_to_file {
+                let link_tag = Tag::Link {
+                    link_type: LinkType::Inline,
+                    dest_url: file_name.clone().into(),
+                    title: graph_name.clone().into(),
+                    id: "".into(),
+                };
+                nodes.push(Event::Start(link_tag));
+            }
+
             let image_tag = Tag::Image {
                 link_type: LinkType::Inline,
                 dest_url: file_name.into(),
@@ -67,11 +88,17 @@ impl GraphvizRenderer for CLIGraphvizToFile {
                 id: "".into(),
             };
 
-            Ok(vec![
+            nodes.extend([
                 Event::Start(image_tag),
                 Event::End(TagEnd::Image),
-                Event::Text("\n\n".into()),
-            ])
+            ]);
+
+            if config.link_to_file {
+                nodes.push(Event::End(TagEnd::Link));
+            }
+            nodes.push(Event::Text("\n\n".into()));
+
+            Ok(nodes)
         } else {
             Err(io::Error::new(io::ErrorKind::InvalidData, "Error response from Graphviz").into())
         }
@@ -129,7 +156,8 @@ mod test {
             index: 0,
         };
 
-        let mut events = CLIGraphviz::render_graphviz(block)
+        let config = GraphvizRendererConfig::default();
+        let mut events = CLIGraphviz::render_graphviz(block, &config)
             .await
             .unwrap()
             .into_iter();
@@ -137,6 +165,63 @@ mod test {
         } else {
             panic!("Unexpected next event")
         }
+        assert_eq!(events.next(), Some(Event::Text("\n\n".into())));
+        assert_eq!(events.next(), None);
+    }
+
+    #[tokio::test]
+    async fn file_events() {
+        let code = r#"digraph Test { a -> b }"#;
+
+        let block = GraphvizBlock {
+            graph_name: "Name".into(),
+            code: code.into(),
+            chapter_name: "".into(),
+            chapter_path: "test-output".into(),
+            index: 0,
+        };
+
+        let config = GraphvizRendererConfig::default();
+        let mut events = CLIGraphvizToFile::render_graphviz(block, &config)
+            .await
+            .expect("Expect rendering to succeed")
+            .into_iter();
+        let next = events.next();
+        assert!(matches!(next, Some(Event::Start(Tag::Image {..}))), "Expected Image got {next:#?}");
+        let next = events.next();
+        assert!(matches!(next, Some(Event::End(TagEnd::Image))), "Expected End Image got {next:#?}");
+        assert_eq!(events.next(), Some(Event::Text("\n\n".into())));
+        assert_eq!(events.next(), None);
+    }
+
+    #[tokio::test]
+    async fn file_events_with_link() {
+        let code = r#"digraph Test { a -> b }"#;
+
+        let block = GraphvizBlock {
+            graph_name: "Name".into(),
+            code: code.into(),
+            chapter_name: "".into(),
+            chapter_path: "test-output".into(),
+            index: 0,
+        };
+
+        let config = GraphvizRendererConfig {
+            link_to_file: true,
+            ..GraphvizRendererConfig::default()
+        };
+        let mut events = CLIGraphvizToFile::render_graphviz(block, &config)
+            .await
+            .expect("Expect rendering to succeed")
+            .into_iter();
+        let next = events.next();
+        assert!(matches!(next, Some(Event::Start(Tag::Link {..}))), "Expected Link got {next:#?}");
+        let next = events.next();
+        assert!(matches!(next, Some(Event::Start(Tag::Image {..}))), "Expected Image got {next:#?}");
+        let next = events.next();
+        assert!(matches!(next, Some(Event::End(TagEnd::Image))), "Expected End Image got {next:#?}");
+        let next = events.next();
+        assert!(matches!(next, Some(Event::End(TagEnd::Link))), "Expected End Link got {next:#?}");
         assert_eq!(events.next(), Some(Event::Text("\n\n".into())));
         assert_eq!(events.next(), None);
     }
