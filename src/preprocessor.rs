@@ -31,9 +31,7 @@ impl Preprocessor for GraphvizPreprocessor {
     }
 
     fn run(&self, ctx: &PreprocessorContext, mut book: Book) -> Result<Book> {
-        let config = ctx
-            .config
-            .get_preprocessor(self.name());
+        let config = ctx.config.get_preprocessor(self.name());
 
         let output_to_file = config
             .and_then(|t| t.get("output-to-file"))
@@ -45,9 +43,7 @@ impl Preprocessor for GraphvizPreprocessor {
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
-        let renderer_config = GraphvizRendererConfig {
-            link_to_file,
-        };
+        let renderer_config = GraphvizRendererConfig { link_to_file };
 
         let src_dir = ctx.root.clone().join(&ctx.config.book.src);
 
@@ -303,7 +299,10 @@ mod test {
 
     #[async_trait]
     impl GraphvizRenderer for NoopRenderer {
-        async fn render_graphviz<'a>(block: GraphvizBlock, _config: &GraphvizRendererConfig) -> Result<Vec<Event<'a>>> {
+        async fn render_graphviz<'a>(
+            block: GraphvizBlock,
+            _config: &GraphvizRendererConfig,
+        ) -> Result<Vec<Event<'a>>> {
             let file_name = block.file_name();
             let output_path = block.output_path();
             let GraphvizBlock {
@@ -448,7 +447,10 @@ digraph Test {
     struct SleepyRenderer;
     #[async_trait]
     impl GraphvizRenderer for SleepyRenderer {
-        async fn render_graphviz<'a>(_block: GraphvizBlock, _config: &GraphvizRendererConfig) -> Result<Vec<Event<'a>>> {
+        async fn render_graphviz<'a>(
+            _block: GraphvizBlock,
+            _config: &GraphvizRendererConfig,
+        ) -> Result<Vec<Event<'a>>> {
             tokio::time::sleep(SLEEP_DURATION).await;
             Ok(vec![Event::Text("".into())])
         }

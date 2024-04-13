@@ -17,7 +17,10 @@ pub struct GraphvizRendererConfig {
 
 #[async_trait]
 pub trait GraphvizRenderer {
-    async fn render_graphviz<'a>(block: GraphvizBlock, _config: &GraphvizRendererConfig) -> Result<Vec<Event<'a>>>;
+    async fn render_graphviz<'a>(
+        block: GraphvizBlock,
+        _config: &GraphvizRendererConfig,
+    ) -> Result<Vec<Event<'a>>>;
 }
 
 pub struct CLIGraphviz;
@@ -51,7 +54,7 @@ pub struct CLIGraphvizToFile;
 impl GraphvizRenderer for CLIGraphvizToFile {
     async fn render_graphviz<'a>(
         block: GraphvizBlock,
-        config: &GraphvizRendererConfig
+        config: &GraphvizRendererConfig,
     ) -> Result<Vec<Event<'a>>> {
         let file_name = block.file_name();
         let output_path = block.output_path();
@@ -88,10 +91,7 @@ impl GraphvizRenderer for CLIGraphvizToFile {
                 id: "".into(),
             };
 
-            nodes.extend([
-                Event::Start(image_tag),
-                Event::End(TagEnd::Image),
-            ]);
+            nodes.extend([Event::Start(image_tag), Event::End(TagEnd::Image)]);
 
             if config.link_to_file {
                 nodes.push(Event::End(TagEnd::Link));
@@ -187,9 +187,15 @@ mod test {
             .expect("Expect rendering to succeed")
             .into_iter();
         let next = events.next();
-        assert!(matches!(next, Some(Event::Start(Tag::Image {..}))), "Expected Image got {next:#?}");
+        assert!(
+            matches!(next, Some(Event::Start(Tag::Image { .. }))),
+            "Expected Image got {next:#?}"
+        );
         let next = events.next();
-        assert!(matches!(next, Some(Event::End(TagEnd::Image))), "Expected End Image got {next:#?}");
+        assert!(
+            matches!(next, Some(Event::End(TagEnd::Image))),
+            "Expected End Image got {next:#?}"
+        );
         assert_eq!(events.next(), Some(Event::Text("\n\n".into())));
         assert_eq!(events.next(), None);
     }
@@ -215,13 +221,25 @@ mod test {
             .expect("Expect rendering to succeed")
             .into_iter();
         let next = events.next();
-        assert!(matches!(next, Some(Event::Start(Tag::Link {..}))), "Expected Link got {next:#?}");
+        assert!(
+            matches!(next, Some(Event::Start(Tag::Link { .. }))),
+            "Expected Link got {next:#?}"
+        );
         let next = events.next();
-        assert!(matches!(next, Some(Event::Start(Tag::Image {..}))), "Expected Image got {next:#?}");
+        assert!(
+            matches!(next, Some(Event::Start(Tag::Image { .. }))),
+            "Expected Image got {next:#?}"
+        );
         let next = events.next();
-        assert!(matches!(next, Some(Event::End(TagEnd::Image))), "Expected End Image got {next:#?}");
+        assert!(
+            matches!(next, Some(Event::End(TagEnd::Image))),
+            "Expected End Image got {next:#?}"
+        );
         let next = events.next();
-        assert!(matches!(next, Some(Event::End(TagEnd::Link))), "Expected End Link got {next:#?}");
+        assert!(
+            matches!(next, Some(Event::End(TagEnd::Link))),
+            "Expected End Link got {next:#?}"
+        );
         assert_eq!(events.next(), Some(Event::Text("\n\n".into())));
         assert_eq!(events.next(), None);
     }
