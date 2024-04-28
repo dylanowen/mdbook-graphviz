@@ -1,6 +1,6 @@
 [package]
 name = "mdbook-graphviz"
-version = "0.1.7"
+version = "0.2.0"
 authors = ["Dylan Owen <dyltotheo@gmail.com>"]
 description = "mdbook preprocessor to add graphviz support"
 readme = "Readme.md"
