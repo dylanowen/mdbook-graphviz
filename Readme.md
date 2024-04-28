@@ -133,5 +133,22 @@ orders itself after `links`:
 after = ["links"]
 ```
 
+## Overriding the `info-string`
+
+Some tools prefer a specific annotation for dot/graphviz diagrams.
+For compatability with these tools `mdbook-graphviz` can support a custom value for marking diagrams it should process.
+This is via the `info-string` flag:
+
+```toml
+[preprocessor.graphviz]
+info-string = "graphviz"
+```
+
+or
+
+```shell
+MDBOOK_preprocessor__graphviz__info_string="graphviz" mdbook build
+```
+
 More information about preprocessors and ordering can be found
 [here](https://rust-lang.github.io/mdBook/format/configuration/preprocessors.html?highlight=preprocessors#require-a-certain-order).
