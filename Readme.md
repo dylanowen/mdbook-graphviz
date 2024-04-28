@@ -97,6 +97,22 @@ This `.gitignore` should cover the generated SVG files.
 *.generated.svg
 ```
 
+## Link To Output File
+
+When using `output-to-file`, links can be added to the images via the `link-to-file` flag:
+
+```toml
+[preprocessor.graphviz]
+output-to-file = true
+link-to-file = true
+```
+
+or
+
+```shell
+MDBOOK_preprocessor__graphviz__output_to_file="true" MDBOOK_preprocessor__graphviz__link_to_file="true" mdbook build
+```
+
 ## Embedding dot files
 Sometimes you don't want to write dot code, but instead include it from a file:
 
