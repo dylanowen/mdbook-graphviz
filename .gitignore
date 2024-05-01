@@ -4,6 +4,8 @@
 /bin/
 /pkg/
 
+/test-output/
+
 # Remove Cargo.lock from gitignore if creating a library, leave it for executables
 # More information here https://doc.rust-lang.org/cargo/guide/cargo-toml-vs-cargo-lock.html
 # Cargo.lock

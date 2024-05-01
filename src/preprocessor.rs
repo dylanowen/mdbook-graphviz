@@ -15,12 +15,29 @@ use pulldown_cmark_to_cmark::cmark;
 use crate::renderer::{CLIGraphviz, CLIGraphvizToFile, GraphvizRenderer};
 
 pub static PREPROCESSOR_NAME: &str = "graphviz";
-pub static INFO_STRING_PREFIX: &str = "dot process";
+pub static DEFAULT_INFO_STRING_PREFIX: &str = "dot process";
+
+pub struct GraphvizConfig {
+    pub output_to_file: bool,
+    pub link_to_file: bool,
+    pub info_string: String,
+}
+
+impl Default for GraphvizConfig {
+    fn default() -> Self {
+        Self {
+            output_to_file: false,
+            link_to_file: false,
+            info_string: DEFAULT_INFO_STRING_PREFIX.to_string(),
+        }
+    }
+}
 
 pub struct GraphvizPreprocessor;
 
 pub struct Graphviz<R: GraphvizRenderer> {
     src_dir: PathBuf,
+    config: GraphvizConfig,
     _phantom: PhantomData<*const R>,
 }
 
@@ -30,12 +47,28 @@ impl Preprocessor for GraphvizPreprocessor {
     }
 
     fn run(&self, ctx: &PreprocessorContext, mut book: Book) -> Result<Book> {
-        let output_to_file = ctx
-            .config
-            .get_preprocessor(self.name())
-            .and_then(|t| t.get("output-to-file"))
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
+        let mut config = GraphvizConfig::default();
+
+        if let Some(ctx_config) = ctx.config.get_preprocessor(self.name()) {
+            if let Some(value) = ctx_config.get("output-to-file") {
+                config.output_to_file = value
+                    .as_bool()
+                    .expect("output-to-file option is required to be a boolean");
+            }
+
+            if let Some(value) = ctx_config.get("link-to-file") {
+                config.link_to_file = value
+                    .as_bool()
+                    .expect("link-to-file option is required to be a boolean");
+            }
+
+            if let Some(value) = ctx_config.get("info-string") {
+                config.info_string = value
+                    .as_str()
+                    .expect("info-string option is required to be a string")
+                    .to_string();
+            }
+        }
 
         let src_dir = ctx.root.clone().join(&ctx.config.book.src);
 
@@ -45,12 +78,12 @@ impl Preprocessor for GraphvizPreprocessor {
             .build()
             .unwrap()
             .block_on(async {
-                if !output_to_file {
-                    Graphviz::<CLIGraphviz>::new(src_dir)
+                if config.output_to_file {
+                    Graphviz::<CLIGraphvizToFile>::new(src_dir, config)
                         .process_sub_items(&mut book.sections)
                         .await
                 } else {
-                    Graphviz::<CLIGraphvizToFile>::new(src_dir)
+                    Graphviz::<CLIGraphviz>::new(src_dir, config)
                         .process_sub_items(&mut book.sections)
                         .await
                 }
@@ -66,9 +99,10 @@ impl Preprocessor for GraphvizPreprocessor {
 }
 
 impl<R: GraphvizRenderer> Graphviz<R> {
-    pub fn new(src_dir: PathBuf) -> Graphviz<R> {
+    pub fn new(src_dir: PathBuf, config: GraphvizConfig) -> Graphviz<R> {
         Self {
             src_dir,
+            config,
             _phantom: PhantomData,
         }
     }
@@ -131,28 +165,32 @@ impl<R: GraphvizRenderer> Graphviz<R> {
                         let block = builder.build(image_index);
                         image_index += 1;
 
-                        event_futures.push(R::render_graphviz(block));
+                        event_futures.push(R::render_graphviz(block, &self.config));
                     }
                     _ => {
                         graphviz_block_builder = Some(builder);
                     }
                 }
             } else {
-                match e {
-                    Event::Start(Tag::CodeBlock(Fenced(info_string)))
-                        if info_string.find(INFO_STRING_PREFIX) == Some(0) =>
-                    {
+                if let Event::Start(Tag::CodeBlock(Fenced(info_string))) = &e {
+                    let prefix_len = self.config.info_string.len();
+                    // The following split is safe because the characters have
+                    // to be byte equal to be a match, therefore we are
+                    // guaranteed to split at a character boundary.
+                    let (prefix, graph_name) =
+                        info_string.split_at(std::cmp::min(info_string.len(), prefix_len));
+                    if prefix == self.config.info_string {
+                        // check if we can have a name at the end of our info string
                         graphviz_block_builder = Some(GraphvizBlockBuilder::new(
-                            info_string.to_string(),
-                            chapter.name.clone(),
                             chapter_path.clone(),
+                            chapter.name.clone().trim().to_string(),
+                            graph_name.trim().to_string(),
                         ));
-                    }
-                    _ => {
-                        // pass through all events that don't impact our Graphviz block
-                        event_futures.push(Box::pin(async { Ok(vec![e]) }));
+                        continue;
                     }
                 }
+                // pass through all events that don't impact our Graphviz block
+                event_futures.push(Box::pin(async { Ok(vec![e]) }));
             }
         }
 
@@ -172,34 +210,19 @@ impl<R: GraphvizRenderer> Graphviz<R> {
 }
 
 struct GraphvizBlockBuilder {
+    path: PathBuf,
     chapter_name: String,
     graph_name: String,
     code: String,
-    path: PathBuf,
 }
 
 impl GraphvizBlockBuilder {
-    fn new<S: Into<String>>(
-        info_string: S,
-        chapter_name: S,
-        path: PathBuf,
-    ) -> GraphvizBlockBuilder {
-        let info_string: String = info_string.into();
-
-        let chapter_name = chapter_name.into();
-
-        // check if we can have a name at the end of our info string
-        let graph_name = if Some(' ') == info_string.chars().nth(INFO_STRING_PREFIX.len()) {
-            info_string[INFO_STRING_PREFIX.len() + 1..].trim()
-        } else {
-            ""
-        };
-
+    fn new(path: PathBuf, chapter_name: String, graph_name: String) -> GraphvizBlockBuilder {
         GraphvizBlockBuilder {
-            chapter_name: chapter_name.trim().into(),
-            graph_name: graph_name.into(),
-            code: String::new(),
             path,
+            chapter_name,
+            graph_name,
+            code: String::new(),
         }
     }
 
@@ -290,7 +313,10 @@ mod test {
 
     #[async_trait]
     impl GraphvizRenderer for NoopRenderer {
-        async fn render_graphviz<'a>(block: GraphvizBlock) -> Result<Vec<Event<'a>>> {
+        async fn render_graphviz<'a>(
+            block: GraphvizBlock,
+            _config: &GraphvizConfig,
+        ) -> Result<Vec<Event<'a>>> {
             let file_name = block.file_name();
             let output_path = block.output_path();
             let GraphvizBlock {
@@ -313,6 +339,53 @@ digraph Test {
 }
 ````"#;
         let chapter = process_chapter(new_chapter(expected)).await.unwrap();
+
+        assert_eq!(chapter.content, expected);
+    }
+
+    #[tokio::test]
+    async fn preprocess_flagged_blocks_with_custom_flag() {
+        let chapter = new_chapter(
+            r#"# Chapter
+```graphviz
+digraph Test {
+    a -> b
+}
+```
+"#,
+        );
+        let expected = format!(
+            r#"# Chapter
+
+{NORMALIZED_CHAPTER_NAME}_0.generated.svg|"/./book/{NORMALIZED_CHAPTER_NAME}_0.generated.svg"||0"#
+        );
+
+        let config = GraphvizConfig {
+            info_string: "graphviz".to_string(),
+            ..GraphvizConfig::default()
+        };
+        let chapter = process_chapter_with_config(chapter, config).await.unwrap();
+
+        assert_eq!(chapter.content, expected);
+    }
+
+    #[tokio::test]
+    async fn do_not_preprocess_flagged_blocks_without_custom_flag() {
+        let expected = r#"# Chapter
+
+````dot
+digraph Test {
+    a -> b
+}
+````"#;
+
+        let config = GraphvizConfig {
+            info_string: "graphviz".to_string(),
+            ..GraphvizConfig::default()
+        };
+        let chapter = process_chapter_with_config(new_chapter(expected), config)
+            .await
+            .unwrap();
 
         assert_eq!(chapter.content, expected);
     }
@@ -435,7 +508,10 @@ digraph Test {
     struct SleepyRenderer;
     #[async_trait]
     impl GraphvizRenderer for SleepyRenderer {
-        async fn render_graphviz<'a>(_block: GraphvizBlock) -> Result<Vec<Event<'a>>> {
+        async fn render_graphviz<'a>(
+            _block: GraphvizBlock,
+            _config: &GraphvizConfig,
+        ) -> Result<Vec<Event<'a>>> {
             tokio::time::sleep(SLEEP_DURATION).await;
             Ok(vec![Event::Text("".into())])
         }
@@ -459,7 +535,7 @@ digraph Test {
         }
 
         let start = Instant::now();
-        Graphviz::<SleepyRenderer>::new(PathBuf::from("/"))
+        Graphviz::<SleepyRenderer>::new(PathBuf::from("/"), GraphvizConfig::default())
             .process_sub_items(&mut chapters)
             .await
             .unwrap();
@@ -526,7 +602,7 @@ digraph Test {
             )),
         ];
 
-        Graphviz::<NoopRenderer>::new(PathBuf::from("/"))
+        Graphviz::<NoopRenderer>::new(PathBuf::from("/"), GraphvizConfig::default())
             .process_sub_items(&mut book_items)
             .await
             .unwrap();
@@ -545,7 +621,14 @@ digraph Test {
     }
 
     async fn process_chapter(chapter: Chapter) -> Result<Chapter> {
-        Graphviz::<NoopRenderer>::new(PathBuf::from("/"))
+        process_chapter_with_config(chapter, GraphvizConfig::default()).await
+    }
+
+    async fn process_chapter_with_config(
+        chapter: Chapter,
+        config: GraphvizConfig,
+    ) -> Result<Chapter> {
+        Graphviz::<NoopRenderer>::new(PathBuf::from("/"), config)
             .process_chapter(chapter)
             .await
     }
