@@ -14,7 +14,7 @@ use tokio::io::AsyncWriteExt;
 pub trait GraphvizRenderer {
     async fn render_graphviz<'a>(
         block: GraphvizBlock,
-        _config: &GraphvizConfig,
+        config: &GraphvizConfig,
     ) -> Result<Vec<Event<'a>>>;
 }
 
@@ -24,9 +24,9 @@ pub struct CLIGraphviz;
 impl GraphvizRenderer for CLIGraphviz {
     async fn render_graphviz<'a>(
         GraphvizBlock { code, .. }: GraphvizBlock,
-        _config: &GraphvizConfig,
+        config: &GraphvizConfig,
     ) -> Result<Vec<Event<'a>>> {
-        let output = call_graphviz(&["-Tsvg"], &code)
+        let output = call_graphviz(&config.arguments, &code)
             .await?
             .wait_with_output()
             .await?;
@@ -61,7 +61,10 @@ impl GraphvizRenderer for CLIGraphvizToFile {
             .to_str()
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Couldn't build output path"))?;
 
-        if call_graphviz(&["-Tsvg", "-o", output_path_str], &code)
+        let mut args_with_output = config.arguments.clone();
+        args_with_output.extend(["-o", output_path_str].iter().map(|s| s.to_string()));
+
+        if call_graphviz(&args_with_output, &code)
             .await?
             .wait()
             .await?
@@ -100,9 +103,9 @@ impl GraphvizRenderer for CLIGraphvizToFile {
     }
 }
 
-async fn call_graphviz(args: &[&str], code: &str) -> Result<Child> {
+async fn call_graphviz(arguments: &Vec<String>, code: &str) -> Result<Child> {
     let mut child = Command::new("dot")
-        .args(args)
+        .args(arguments)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())

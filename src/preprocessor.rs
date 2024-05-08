@@ -21,6 +21,7 @@ pub struct GraphvizConfig {
     pub output_to_file: bool,
     pub link_to_file: bool,
     pub info_string: String,
+    pub arguments: Vec<String>,
 }
 
 impl Default for GraphvizConfig {
@@ -29,6 +30,7 @@ impl Default for GraphvizConfig {
             output_to_file: false,
             link_to_file: false,
             info_string: DEFAULT_INFO_STRING_PREFIX.to_string(),
+            arguments: vec![String::from("-Tsvg")],
         }
     }
 }
@@ -67,6 +69,20 @@ impl Preprocessor for GraphvizPreprocessor {
                     .as_str()
                     .expect("info-string option is required to be a string")
                     .to_string();
+            }
+
+            if let Some(value) = ctx_config.get("arguments") {
+                config.arguments = value
+                    .as_array()
+                    .expect("arguments option is required to be an array")
+                    .iter()
+                    .map(|v| {
+                        String::from(
+                            v.as_str()
+                                .expect("arguments option is required to contain strings"),
+                        )
+                    })
+                    .collect()
             }
         }
 
