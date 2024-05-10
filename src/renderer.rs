@@ -135,7 +135,7 @@ fn format_output(output: String) -> String {
     let output = NEWLINES_RE.replace_all(&output, "");
     let output = output.trim();
 
-    format!("<div>{output}</div>")
+    format!("<div class=\"mdbook-graphviz-output\">{output}</div>")
 }
 
 #[cfg(test)]
