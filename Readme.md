@@ -42,10 +42,11 @@ digraph {
 #### Output
 
 ~~~markdown
-<div><svg>...</svg></div>
-
-
+<div class="mdbook-graphviz-output"><svg>...</svg></div>
 ~~~
+
+The `class` attribute gives you the chance to apply a common style to all
+the output images (e.g. [center all of them](https://github.com/dylanowen/mdbook-graphviz/issues/26)).
 
 #### Rendered
 
