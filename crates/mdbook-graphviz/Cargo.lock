@@ -220,15 +220,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
-name = "cgo"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2bee9e6858ad5c2ceac0871de16220592d06e64da037f5e09b0516e4d2dda2ea"
-dependencies = [
- "cc",
-]
-
-[[package]]
 name = "chrono"
 version = "0.4.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -986,67 +977,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "mdbook-d2-interactive"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "async-recursion",
- "async-trait",
- "cgo",
- "clap",
- "env_logger",
- "futures",
- "lazy_static",
- "log",
- "mdbook",
- "mdbook-svg-inline-preprocessor",
- "pulldown-cmark",
- "pulldown-cmark-to-cmark",
- "rand",
- "regex",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tokio-stream",
- "toml 0.8.13",
-]
-
-[[package]]
 name = "mdbook-graphviz"
 version = "0.2.0"
 dependencies = [
- "anyhow",
  "async-recursion",
  "async-trait",
- "futures",
- "lazy_static",
- "mdbook",
- "mdbook-svg-inline-preprocessor",
- "pulldown-cmark",
- "pulldown-cmark-to-cmark",
- "regex",
- "tokio",
- "toml 0.8.13",
-]
-
-[[package]]
-name = "mdbook-svg-inline-preprocessor"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "async-recursion",
  "clap",
- "env_logger",
  "futures",
  "lazy_static",
- "log",
  "mdbook",
  "pulldown-cmark",
  "pulldown-cmark-to-cmark",
  "regex",
  "serde_json",
  "tokio",
+ "toml 0.8.12",
 ]
 
 [[package]]
@@ -1537,9 +1482,9 @@ dependencies = [
 
 [[package]]
 name = "serde_spanned"
-version = "0.6.6"
+version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79e674e01f999af37c49f70a6ede167a8a60b2503e56c5599532a65baa5969a0"
+checksum = "eb3622f419d1296904700073ea6cc23ad690adbd66f13ea683df73298736f0c1"
 dependencies = [
  "serde",
 ]
@@ -1776,17 +1721,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tokio-stream"
-version = "0.1.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "267ac89e0bec6e691e5813911606935d77c476ff49024f98abcea3e7b15e37af"
-dependencies = [
- "futures-core",
- "pin-project-lite",
- "tokio",
-]
-
-[[package]]
 name = "tokio-tungstenite"
 version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1823,9 +1757,9 @@ dependencies = [
 
 [[package]]
 name = "toml"
-version = "0.8.13"
+version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4e43f8cc456c9704c851ae29c67e17ef65d2c30017c17a9765b89c382dc8bba"
+checksum = "e9dd1545e8208b4a5af1aa9bbd0b4cf7e9ea08fabc5d0a5c67fcaafa17433aa3"
 dependencies = [
  "serde",
  "serde_spanned",
@@ -1835,18 +1769,18 @@ dependencies = [
 
 [[package]]
 name = "toml_datetime"
-version = "0.6.6"
+version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4badfd56924ae69bcc9039335b2e017639ce3f9b001c393c1b2d1ef846ce2cbf"
+checksum = "3550f4e9685620ac18a50ed434eb3aec30db8ba93b0287467bca5826ea25baf1"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "toml_edit"
-version = "0.22.13"
+version = "0.22.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c127785850e8c20836d49732ae6abfa47616e60bf9d9f57c43c250361a9db96c"
+checksum = "8e40bb779c5187258fd7aad0eb68cb8706a0a81fa712fbea808ab43c4b8374c4"
 dependencies = [
  "indexmap",
  "serde",

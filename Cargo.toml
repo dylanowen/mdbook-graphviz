@@ -1,31 +1,6 @@
-[package]
-name = "mdbook-graphviz"
-version = "0.2.0"
-authors = ["Dylan Owen <dyltotheo@gmail.com>"]
-description = "mdbook preprocessor to add graphviz support"
-readme = "Readme.md"
-license = "MPL-2.0"
-homepage = "https://github.com/dylanowen/mdbook-graphviz"
-repository = "https://github.com/dylanowen/mdbook-graphviz"
-edition = "2021"
+[workspace]
+resolver = "2"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-mdbook = "^0.4.37"
-clap = { version = "4.5.4", features = ["derive"] }
-serde_json = "1.0.116"
-pulldown-cmark = "0.10.3"
-pulldown-cmark-to-cmark = "13.0"
-
-lazy_static = "1.4.0"
-regex = "1.10.4"
-toml = "0.8.12"
-
-tokio = { version = "1.37", features = ["process"] }
-futures = "0.3.30"
-async-trait = "0.1.80"
-async-recursion = "1.1.1"
-
-[dev-dependencies]
-tokio = { version = "1.37", features = ["process", "time"] }
+members = [
+    "crates/*",
+]

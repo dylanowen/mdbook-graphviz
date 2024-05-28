@@ -1,0 +1,46 @@
+[package]
+name = "mdbook-d2-interactive"
+version = "0.0.1"
+authors = ["Dylan Owen <dyltotheo@gmail.com>"]
+description = "mdbook preprocessor to add d2 interactive support"
+readme = "Readme.md"
+license = "MPL-2.0"
+homepage = "https://github.com/dylanowen/mdbook-graphviz"
+repository = "https://github.com/dylanowen/mdbook-graphviz"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[build-dependencies]
+cgo = "0.3"
+
+[dependencies]
+mdbook-svg-inline-preprocessor = { path = "../mdbook-svg-inline-preprocessor", version = "0.0.1" }
+
+mdbook = "=0.4.37"
+clap = { version = "4.5", features = ["derive"] }
+pulldown-cmark = "0.10"
+pulldown-cmark-to-cmark = "13.0"
+
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+lazy_static = "1.4.0"
+regex = "1.10"
+toml = "0.8"
+
+tokio = { version = "1.37", features = ["fs", "process"] }
+tokio-stream = { version = "0.1", features = ["fs"] }
+futures = "0.3"
+async-trait = "0.1"
+async-recursion = "1.1"
+
+rand = "0.8"
+anyhow = "1.0"
+thiserror = "1.0"
+
+log = "0.4"
+env_logger = "0.11"
+
+[dev-dependencies]
+tokio = { version = "1.37", features = ["process", "time"] }
