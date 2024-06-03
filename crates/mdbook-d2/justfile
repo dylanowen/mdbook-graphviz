@@ -1,0 +1,19 @@
+default: build
+
+check:
+	cargo check
+
+build:
+	cargo build
+
+release:
+	cargo build --release
+
+test:
+	cargo test
+
+install:
+	cargo install --force --path .
+
+clean:
+	cargo clean

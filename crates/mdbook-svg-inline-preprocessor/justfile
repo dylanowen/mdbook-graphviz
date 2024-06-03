@@ -1,0 +1,32 @@
+default: build
+
+check:
+	cargo check
+
+build: build-rust build-js
+
+build-rust:
+    cargo build
+
+build-js:
+    . ${HOME}/.nvm/nvm.sh && nvm use && npm run build
+
+release: release-js release-rust
+
+release-rust:
+    cargo build --release
+
+release-js:
+    . ${HOME}/.nvm/nvm.sh && nvm use && npm run release
+
+test:
+	cargo test
+
+install:
+	cargo install --force --path .
+
+clean:
+	cargo clean
+
+_nvm command:
+    . ${HOME}/.nvm/nvm.sh && nvm use && {{command}}
