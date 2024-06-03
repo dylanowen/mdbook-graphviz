@@ -21,6 +21,7 @@ use crate::SvgRenderer;
 #[derive(Default)]
 pub struct SvgRendererSharedConfig {
     pub info_string: String,
+    pub renderer: String,
     pub copy_js: Option<PathBuf>,
     pub copy_css: Option<PathBuf>,
     pub output_to_file: bool,
@@ -42,6 +43,7 @@ pub trait SvgPreprocessor {
 
     fn run(&self, ctx: &PreprocessorContext, mut book: Book) -> Result<Book> {
         let mut config = SvgRendererSharedConfig::default();
+        config.renderer.clone_from(&ctx.renderer);
 
         if let Some(ctx_config) = ctx.config.get_preprocessor(self.name()) {
             config.info_string = if let Some(value) = ctx_config.get("info-string") {
@@ -370,14 +372,11 @@ impl SvgBlock {
         S: Into<Option<usize>>,
         E: Into<Option<usize>>,
     {
-        let start_line_number = self.source_code_initial_line
-            + inline_line_number_start
-                .into()
-                .map(|o| o + 1)
-                .unwrap_or_default();
+        let start_line_number =
+            self.source_code_initial_line + inline_line_number_start.into().unwrap_or_default();
         let end_line_number = inline_line_number_end
             .into()
-            .map(|o| self.source_code_initial_line + o + 1);
+            .map(|o| self.source_code_initial_line + o);
 
         format!(
             "{}({}{})",
@@ -414,7 +413,7 @@ impl<'a> Default for ParsingState<'a> {
     }
 }
 
-struct SvgBlockBuilder {
+pub(crate) struct SvgBlockBuilder {
     source_code: String,
     /// the line where our code block starts. Ex: ```dot process
     source_code_initial_line: usize,
@@ -426,7 +425,7 @@ struct SvgBlockBuilder {
 }
 
 impl SvgBlockBuilder {
-    fn new(
+    pub(crate) fn new(
         chapter_name: String,
         book_path: PathBuf,
         chapter_relative_path: PathBuf,
@@ -445,11 +444,11 @@ impl SvgBlockBuilder {
         }
     }
 
-    fn append_source_code<S: Into<String>>(&mut self, code: S) {
+    pub(crate) fn append_source_code<S: Into<String>>(&mut self, code: S) {
         self.source_code.push_str(&code.into());
     }
 
-    fn build(self, index: usize) -> SvgBlock {
+    pub(crate) fn build(self, index: usize) -> SvgBlock {
         SvgBlock {
             source_code: self.source_code,
             source_code_initial_line: self.source_code_initial_line,
@@ -460,5 +459,224 @@ impl SvgBlockBuilder {
             graph_name: self.graph_name,
             index,
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    // use async_trait::async_trait;
+
+    use crate::renderer::test::TestRenderer;
+    use crate::renderer::{D2_CONTAINER_CLASS, TAB_CONTENT_CLASS};
+
+    use super::*;
+
+    static CHAPTER_NAME: &str = "Test Chapter";
+    static NORMALIZED_CHAPTER_NAME: &str = "test_chapter";
+
+    // use std::time::{Duration, Instant};
+    //
+    // static CHAPTER_NAME: &str = "Test Chapter";
+    // static NORMALIZED_CHAPTER_NAME: &str = "test_chapter";
+    //
+    // struct NoopRenderer;
+    //
+    // #[async_trait]
+    // impl GraphvizRendererOld for NoopRenderer {
+    //     async fn render_graphviz<'a>(
+    //         block: GraphvizBlock,
+    //         _config: &GraphvizConfig,
+    //     ) -> Result<Vec<Event<'a>>> {
+    //         let file_name = block.svg_file_name();
+    //         let output_path = block.svg_output_path();
+    //         let GraphvizBlock {
+    //             graph_name, index, ..
+    //         } = block;
+    //
+    //         Ok(vec![Event::Text(
+    //             format!("{file_name}|{output_path:?}|{graph_name}|{index}").into(),
+    //         )])
+    //     }
+    // }
+
+    #[tokio::test]
+    async fn only_preprocess_flagged_blocks() {
+        let expected = r#"# Chapter
+
+````svg
+digraph Test {
+    a -> b
+}
+````"#;
+        let renderer = TestRenderer {
+            config: SvgRendererSharedConfig {
+                info_string: "svg process".to_string(),
+                ..Default::default()
+            },
+        };
+        let chapter = TestPreprocessor
+            .process_chapter(&renderer, new_chapter(expected), Path::new(""))
+            .await
+            .unwrap();
+
+        assert_eq!(chapter.content, expected);
+    }
+
+    #[tokio::test]
+    async fn preprocess_flagged_blocks_with_custom_flag() {
+        let chapter = new_chapter(
+            r#"# Chapter
+```custom
+digraph Test {
+    a -> b
+}
+```
+"#,
+        );
+        let expected = format!(
+            r#"# Chapter
+
+
+
+<div class="{D2_CONTAINER_CLASS}"><div><div id="{TAB_CONTENT_CLASS}-test_0" class="{TAB_CONTENT_CLASS} mdbook-graphviz-output">result</div></div></div>
+
+"#
+        );
+
+        let renderer = TestRenderer {
+            config: SvgRendererSharedConfig {
+                info_string: "custom".to_string(),
+                ..Default::default()
+            },
+        };
+        let chapter = TestPreprocessor
+            .process_chapter(&renderer, chapter, Path::new(""))
+            .await
+            .unwrap();
+
+        assert_eq!(chapter.content, expected);
+    }
+
+    #[tokio::test]
+    async fn do_not_preprocess_flagged_blocks_without_custom_flag() {
+        let expected = r#"# Chapter
+
+````dot
+digraph Test {
+    a -> b
+}
+````"#;
+
+        let renderer = TestRenderer {
+            config: SvgRendererSharedConfig {
+                info_string: "svg".to_string(),
+                ..Default::default()
+            },
+        };
+        let chapter = TestPreprocessor
+            .process_chapter(&renderer, new_chapter(expected), Path::new(""))
+            .await
+            .unwrap();
+
+        assert_eq!(chapter.content, expected);
+    }
+
+    #[tokio::test]
+    async fn no_name() {
+        let chapter = new_chapter(
+            r#"# Chapter
+```dot process
+digraph Test {
+    a -> b
+}
+```
+"#,
+        );
+
+        let expected = format!(
+            r#"# Chapter
+
+{NORMALIZED_CHAPTER_NAME}_0.generated.svg|"/./book/{NORMALIZED_CHAPTER_NAME}_0.generated.svg"||0"#
+        );
+
+        let renderer = TestRenderer {
+            config: SvgRendererSharedConfig {
+                info_string: "svg".to_string(),
+                ..Default::default()
+            },
+        };
+        let chapter = TestPreprocessor
+            .process_chapter(&renderer, chapter, Path::new(""))
+            .await
+            .unwrap();
+
+        println!("{}", expected);
+
+        assert_eq!(chapter.content, expected);
+    }
+
+    #[tokio::test]
+    async fn named_blocks() {
+        let chapter = new_chapter(
+            r#"# Chapter
+```svg Graph Name
+digraph Test {
+    a -> b
+}
+```
+"#,
+        );
+
+        let expected = format!(
+            r#"# Chapter
+
+{NORMALIZED_CHAPTER_NAME}_graph_name_0.generated.svg|"/./book/{NORMALIZED_CHAPTER_NAME}_graph_name_0.generated.svg"|Graph Name|0"#
+        );
+
+        let renderer = TestRenderer {
+            config: SvgRendererSharedConfig {
+                info_string: "svg".to_string(),
+                ..Default::default()
+            },
+        };
+        let chapter = TestPreprocessor
+            .process_chapter(&renderer, chapter, Path::new(""))
+            .await
+            .unwrap();
+
+        assert_eq!(chapter.content, expected);
+    }
+
+    struct TestPreprocessor;
+
+    impl SvgPreprocessor for TestPreprocessor {
+        type Renderer = TestRenderer;
+
+        fn name(&self) -> &str {
+            "test"
+        }
+
+        fn default_info_string(&self) -> &str {
+            "test"
+        }
+
+        fn build_renderer(
+            &self,
+            _ctx: &PreprocessorContext,
+            shared_config: SvgRendererSharedConfig,
+        ) -> Result<Self::Renderer> {
+            Ok(TestRenderer {
+                config: shared_config,
+            })
+        }
+    }
+
+    fn new_chapter<S: ToString>(content: S) -> Chapter {
+        Chapter::new(
+            CHAPTER_NAME,
+            content.to_string(),
+            PathBuf::from("./book/chapter.md"),
+            vec![],
+        )
     }
 }

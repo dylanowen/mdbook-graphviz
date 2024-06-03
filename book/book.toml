@@ -6,10 +6,12 @@ src = "src"
 title = "Sample"
 
 [preprocessor.graphviz]
+command = "cargo run -p mdbook-graphviz"
 copy-css = true
 copy-js = true
 
 [preprocessor.d2-interactive]
+command = "cargo run -p mdbook-d2-interactive"
 copy-css = true
 copy-js = true
 
@@ -18,3 +20,5 @@ copy-js = true
 [output.html]
 additional-css = ["css/svg.css"]
 additional-js = ["js/svg.js"]
+
+[output.pdf]

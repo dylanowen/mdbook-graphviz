@@ -15,10 +15,20 @@ lint:
 check:
 	cargo check
 
-build:
+dev:
+    MDBOOK_preprocessor__graphviz__command="cargo run -p mdbook-graphviz" \
+    MDBOOK_preprocessor__d2_interactive__command="cargo run -p mdbook-d2-interactive" \
+      mdbook serve book
+
+build: build-book
 	cargo build
 
-release: release-js release-rust
+build-book:
+    MDBOOK_preprocessor__graphviz__command="cargo run -p mdbook-graphviz" \
+    MDBOOK_preprocessor__d2_interactive__command="cargo run -p mdbook-d2-interactive" \
+      mdbook build book
+
+release: release-js release-rust release-book
 
 release-rust:
     cargo build --release
@@ -26,10 +36,15 @@ release-rust:
 release-js:
     just --justfile crates/mdbook-svg-inline-preprocessor/justfile release-js
 
+release-book:
+    MDBOOK_preprocessor__graphviz__command="cargo run -p mdbook-graphviz --release" \
+    MDBOOK_preprocessor__d2_interactive__command="cargo run -p mdbook-d2-interactive --release" \
+      mdbook build book
+
 test:
 	cargo test
 
-pre-commit-rust: fix fmt lint test release-rust
+pre-commit-rust: fix fmt lint test release-rust release-book
 
 pre-commit: fix fmt lint test release
 
@@ -41,6 +56,3 @@ install:
 
 clean:
 	cargo clean
-
-_graphviz command:
-    just --justfile crates/mdbook-graphviz {{command}}

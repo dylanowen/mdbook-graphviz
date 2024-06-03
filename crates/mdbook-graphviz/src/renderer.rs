@@ -26,6 +26,10 @@ impl SvgRenderer for GraphvizRenderer {
         &self.config.info_string
     }
 
+    fn renderer(&self) -> &str {
+        &self.config.renderer
+    }
+
     fn copy_js(&self) -> Option<&Path> {
         self.config.copy_js.as_deref()
     }
@@ -84,61 +88,8 @@ async fn call_graphviz(arguments: &Vec<String>, code: &str) -> Result<Child> {
 // mod test {
 //     use super::*;
 //
-//     #[tokio::test]
-//     async fn inline_events() {
-//         let code = r#"digraph Test { a -> b }"#;
 //
-//         let block = GraphvizBlock {
-//             graph_name: "Name".into(),
-//             code: code.into(),
-//             chapter_name: "".into(),
-//             chapter_path: "".into(),
-//             index: 0,
-//         };
 //
-//         let config = GraphvizConfig::default();
-//         let mut events = CLIGraphviz::render_graphviz(block, &config)
-//             .await
-//             .unwrap()
-//             .into_iter();
-//         if let Some(Event::Html(_)) = events.next() {
-//         } else {
-//             panic!("Unexpected next event")
-//         }
-//         assert_eq!(events.next(), Some(Event::Text("\n\n".into())));
-//         assert_eq!(events.next(), None);
-//     }
-//
-//     #[tokio::test]
-//     async fn file_events() {
-//         let code = r#"digraph Test { a -> b }"#;
-//
-//         let block = GraphvizBlock {
-//             graph_name: "Name".into(),
-//             code: code.into(),
-//             chapter_name: "".into(),
-//             chapter_path: "test-output".into(),
-//             index: 0,
-//         };
-//
-//         let config = GraphvizConfig::default();
-//         let mut events = CLIGraphvizToFile::render_graphviz(block, &config)
-//             .await
-//             .expect("Expect rendering to succeed")
-//             .into_iter();
-//         let next = events.next();
-//         assert!(
-//             matches!(next, Some(Event::Start(Tag::Image { .. }))),
-//             "Expected Image got {next:#?}"
-//         );
-//         let next = events.next();
-//         assert!(
-//             matches!(next, Some(Event::End(TagEnd::Image))),
-//             "Expected End Image got {next:#?}"
-//         );
-//         assert_eq!(events.next(), Some(Event::Text("\n\n".into())));
-//         assert_eq!(events.next(), None);
-//     }
 //
 //     #[tokio::test]
 //     async fn file_events_with_link() {

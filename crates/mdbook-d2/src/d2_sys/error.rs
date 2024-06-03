@@ -52,6 +52,15 @@ pub struct AstError {
     pub message: String,
 }
 
+impl AstError {
+    pub fn start_line(&self) -> usize {
+        self.range.start.line + 1
+    }
+    pub fn end_line(&self) -> usize {
+        self.range.end.line + 1
+    }
+}
+
 #[derive(Debug)]
 pub struct Range {
     pub path: String,
@@ -125,12 +134,17 @@ fn string_to_position(raw_position: &str) -> Result<Position, String> {
 
 #[cfg(test)]
 mod test {
-    use crate::d2_sys::render;
+    use crate::d2_sys::{render, D2Error};
 
     #[test]
     fn test_parse_error() {
-        let err = render(r#"Chicken's plan: {"#).unwrap_err();
-
-        println!("{:?}", err);
+        match render("Chicken's plan:\n{\n").unwrap_err() {
+            D2Error::Parse(parse_error) => {
+                assert_eq!(parse_error.errors.len(), 1);
+                let error = &parse_error.errors[0];
+                assert_eq!(error.range.start.line, 2);
+            }
+            err => panic!("Unexpected error: {:?}", err),
+        }
     }
 }

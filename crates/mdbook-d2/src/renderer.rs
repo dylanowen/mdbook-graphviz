@@ -24,6 +24,10 @@ impl SvgRenderer for D2Renderer {
         &self.config.info_string
     }
 
+    fn renderer(&self) -> &str {
+        &self.config.renderer
+    }
+
     fn copy_js(&self) -> Option<&Path> {
         self.config.copy_js.as_deref()
     }
@@ -47,11 +51,11 @@ impl SvgRenderer for D2Renderer {
                     let parse_errors = parse_error
                         .errors
                         .into_iter()
-                        .rev()
                         .map(|error| {
                             format!(
                                 "{}: D2 {}",
-                                block.location_string(error.range.start.line, error.range.end.line),
+                                // D2 errors are 0 indexed
+                                block.location_string(error.start_line(), error.end_line()),
                                 error.message
                             )
                         })
