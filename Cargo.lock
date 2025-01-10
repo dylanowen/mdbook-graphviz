@@ -986,7 +986,7 @@ dependencies = [
  "once_cell",
  "opener",
  "pathdiff",
- "pulldown-cmark",
+ "pulldown-cmark 0.10.3",
  "regex",
  "serde",
  "serde_json",
@@ -1009,7 +1009,7 @@ dependencies = [
  "futures",
  "lazy_static",
  "mdbook",
- "pulldown-cmark",
+ "pulldown-cmark 0.10.3",
  "pulldown-cmark-to-cmark",
  "regex",
  "serde_json",
@@ -1378,6 +1378,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "pulldown-cmark"
+version = "0.12.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f86ba2052aebccc42cbbb3ed234b8b13ce76f75c3551a303cb2bcffcff12bb14"
+dependencies = [
+ "bitflags 2.5.0",
+ "memchr",
+ "unicase",
+]
+
+[[package]]
 name = "pulldown-cmark-escape"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1385,11 +1396,11 @@ checksum = "d5d8f9aa0e3cbcfaf8bf00300004ee3b72f74770f9cbac93f6928771f613276b"
 
 [[package]]
 name = "pulldown-cmark-to-cmark"
-version = "13.0.0"
+version = "20.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f609795c8d835f79dcfcf768415b9fb57ef1b74891e99f86e73f43a7a257163b"
+checksum = "9011f674c69867783ceecfeb28573c75bcc9473ae64dcc3180d4a939943c3e42"
 dependencies = [
- "pulldown-cmark",
+ "pulldown-cmark 0.12.2",
 ]
 
 [[package]]
