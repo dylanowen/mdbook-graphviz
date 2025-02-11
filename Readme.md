@@ -90,7 +90,7 @@ or
 MDBOOK_preprocessor__graphviz__respect_theme="true" mdbook build
 ```
 
-and you get:
+and this is what you get in the Navy theme:
 
 ![](respect_theme_sample.svg)
 
