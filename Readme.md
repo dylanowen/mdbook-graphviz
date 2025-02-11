@@ -90,9 +90,21 @@ or
 MDBOOK_preprocessor__graphviz__respect_theme="true" mdbook build
 ```
 
-and this is what you get in the Navy theme:
+### Rendered
 
-![](respect_theme_sample.svg)
+<details>
+<summary> Default dark </summary>
+
+![](respect_theme_gh_default_dark_sample.svg)
+
+</details>
+
+<details>
+<summary> Dimmed dark </summary>
+
+![](respect_theme_gh_dimmed_dark_sample.svg)
+
+</details>
 
 Warning: this flag is not yet supported with `output-to-file` set.
 
