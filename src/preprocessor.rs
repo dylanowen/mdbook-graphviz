@@ -20,6 +20,7 @@ pub static DEFAULT_INFO_STRING_PREFIX: &str = "dot process";
 pub struct GraphvizConfig {
     pub output_to_file: bool,
     pub link_to_file: bool,
+    pub respect_theme: bool,
     pub info_string: String,
     pub arguments: Vec<String>,
 }
@@ -29,6 +30,7 @@ impl Default for GraphvizConfig {
         Self {
             output_to_file: false,
             link_to_file: false,
+            respect_theme: false,
             info_string: DEFAULT_INFO_STRING_PREFIX.to_string(),
             arguments: vec![String::from("-Tsvg")],
         }
@@ -69,6 +71,16 @@ impl Preprocessor for GraphvizPreprocessor {
                     .as_str()
                     .expect("info-string option is required to be a string")
                     .to_string();
+            }
+
+            if let Some(value) = ctx_config.get("respect-theme") {
+                config.respect_theme = value
+                    .as_bool()
+                    .expect("respect-theme option is required to be a boolean");
+            }
+
+            if config.respect_theme && config.output_to_file {
+                eprintln!("Warning: `respect-theme` and `output-to-file` flags are incompatible with each other");
             }
 
             if let Some(value) = ctx_config.get("arguments") {

@@ -1,4 +1,9 @@
+use regex::RegexBuilder;
+use std::borrow::Cow;
+use std::collections::BinaryHeap;
+use std::ffi::OsStr;
 use std::io;
+use std::iter;
 use std::process::Stdio;
 use tokio::process::{Child, Command};
 
@@ -9,6 +14,8 @@ use regex::Regex;
 
 use crate::preprocessor::{GraphvizBlock, GraphvizConfig};
 use tokio::io::AsyncWriteExt;
+
+type RegexResult<T> = std::result::Result<T, regex::Error>;
 
 #[async_trait]
 pub trait GraphvizRenderer {
@@ -26,20 +33,38 @@ impl GraphvizRenderer for CLIGraphviz {
         GraphvizBlock { code, .. }: GraphvizBlock,
         config: &GraphvizConfig,
     ) -> Result<Vec<Event<'a>>> {
-        let output = call_graphviz(&config.arguments, &code)
-            .await?
-            .wait_with_output()
-            .await?;
-        if output.status.success() {
-            let graph_svg = String::from_utf8(output.stdout)?;
+        let reserved_color = config
+            .respect_theme
+            .then(|| reserve_color_code(&code))
+            .transpose()?;
 
-            Ok(vec![
-                Event::Html(format_output(graph_svg).into()),
-                Event::Text("\n\n".into()),
-            ])
-        } else {
-            Err(io::Error::new(io::ErrorKind::InvalidData, "Error response from Graphviz").into())
+        let append_arguments = reserved_color.map(respect_theme_args);
+        let output = call_graphviz(
+            config
+                .arguments
+                .iter()
+                .chain(append_arguments.iter().flatten()),
+            &code,
+        )
+        .await?
+        .wait_with_output()
+        .await?;
+
+        if !output.status.success() {
+            return Err(
+                io::Error::new(io::ErrorKind::InvalidData, "Error response from Graphviz").into(),
+            );
         }
+
+        let mut graph_svg = String::from_utf8(output.stdout)?;
+        if let Some(reserved) = reserved_color {
+            replace_color_with_fg(&mut graph_svg, reserved)?;
+        }
+
+        Ok(vec![
+            Event::Html(format_output(&graph_svg).into()),
+            Event::Text("\n\n".into()),
+        ])
     }
 }
 
@@ -51,6 +76,8 @@ impl GraphvizRenderer for CLIGraphvizToFile {
         block: GraphvizBlock,
         config: &GraphvizConfig,
     ) -> Result<Vec<Event<'a>>> {
+        // For some reason files cannot depend on CSS variables, so ignore `config.respect_theme`
+
         let file_name = block.file_name();
         let output_path = block.output_path();
         let GraphvizBlock {
@@ -103,7 +130,11 @@ impl GraphvizRenderer for CLIGraphvizToFile {
     }
 }
 
-async fn call_graphviz(arguments: &Vec<String>, code: &str) -> Result<Child> {
+async fn call_graphviz<I, S>(arguments: I, code: &str) -> Result<Child>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
     let mut child = Command::new("dot")
         .args(arguments)
         .stdin(Stdio::piped())
@@ -118,7 +149,54 @@ async fn call_graphviz(arguments: &Vec<String>, code: &str) -> Result<Child> {
     Ok(child)
 }
 
-fn format_output(output: String) -> String {
+/// Reserve unused color code
+fn reserve_color_code(source: &str) -> io::Result<u32> {
+    lazy_static! {
+        static ref LOWERCASE_COLOR_CODES: Regex = Regex::new(r##""#[0-9a-fA-F]{6}""##).unwrap();
+    }
+
+    // Reserve one free hexadecimal color code
+    let color_codes: BinaryHeap<u32> = LOWERCASE_COLOR_CODES
+        .find_iter(source)
+        .map(|m| u32::from_str_radix(m.as_str().trim_matches(['"', '#']), 16))
+        .chain(iter::once(Ok(0))) // add plain black in case no color codes are found
+        .collect::<Result<_, _>>()
+        .unwrap();
+    let color_codes = color_codes.into_sorted_vec();
+    (0..=0xffffff)
+        .rev()
+        .zip(color_codes.iter().rev())
+        .find_map(|(candidate, found)| (candidate != *found).then_some(candidate))
+        .ok_or(io::Error::new(
+            io::ErrorKind::FileTooLarge,
+            "Out of hexadecimal color literals",
+        ))
+}
+
+/// Required CLI arguments to respect mdbook theme
+fn respect_theme_args(reserved_color: u32) -> [String; 4] {
+    [
+        format!("-Nfontcolor=#{reserved_color:x}"),
+        format!("-Ncolor=#{reserved_color:x}"),
+        format!("-Ecolor=#{reserved_color:x}"),
+        format!("-Gbgcolor=transparent"),
+    ]
+}
+
+/// Replace color code with "var(--fg)"
+fn replace_color_with_fg(text: &mut String, color_code: u32) -> RegexResult<()> {
+    let reserved_color_code = RegexBuilder::new(&format!(r##""#{color_code:x}""##))
+        .case_insensitive(true)
+        .build()?;
+    let processed = reserved_color_code.replace_all(text, "\"var(--fg)\"");
+    // `Regex::replace_all` would return `Cow::Borrowed` if no replacements were made
+    if let Cow::Owned(processed) = processed {
+        *text = processed;
+    }
+    Ok(())
+}
+
+fn format_output(output: &str) -> String {
     lazy_static! {
         static ref DOCTYPE_RE: Regex = Regex::new(r"<!DOCTYPE [^>]+>").unwrap();
         static ref XML_TAG_RE: Regex = Regex::new(r"<\?xml [^>]+\?>").unwrap();
