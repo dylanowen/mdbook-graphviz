@@ -152,11 +152,11 @@ where
 /// Reserve unused color code
 fn reserve_color_code(source: &str) -> io::Result<u32> {
     lazy_static! {
-        static ref LOWERCASE_COLOR_CODES: Regex = Regex::new(r##""#[0-9a-fA-F]{6}""##).unwrap();
+        static ref COLOR_CODES: Regex = Regex::new(r##""#[0-9a-fA-F]{6}""##).unwrap();
     }
 
     // Reserve one free hexadecimal color code
-    let color_codes: BinaryHeap<u32> = LOWERCASE_COLOR_CODES
+    let color_codes: BinaryHeap<u32> = COLOR_CODES
         .find_iter(source)
         .map(|m| u32::from_str_radix(m.as_str().trim_matches(['"', '#']), 16))
         .chain(iter::once(Ok(0))) // add plain black in case no color codes are found
