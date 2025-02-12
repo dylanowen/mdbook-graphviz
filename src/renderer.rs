@@ -1,6 +1,6 @@
 use regex::RegexBuilder;
 use std::borrow::Cow;
-use std::collections::BinaryHeap;
+use std::collections::BTreeSet;
 use std::ffi::OsStr;
 use std::io;
 use std::iter;
@@ -156,13 +156,12 @@ fn reserve_color_code(source: &str) -> io::Result<u32> {
     }
 
     // Reserve one free hexadecimal color code
-    let color_codes: BinaryHeap<u32> = COLOR_CODES
+    let color_codes: BTreeSet<u32> = COLOR_CODES
         .find_iter(source)
         .map(|m| u32::from_str_radix(m.as_str().trim_matches(['"', '#']), 16))
         .chain(iter::once(Ok(0))) // add plain black in case no color codes are found
         .collect::<Result<_, _>>()
         .unwrap();
-    let color_codes = color_codes.into_sorted_vec();
     (0..=0xffffff)
         .rev()
         .zip(color_codes.iter().rev())
