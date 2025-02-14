@@ -173,11 +173,12 @@ fn reserve_color_code(source: &str) -> io::Result<u32> {
 }
 
 /// Required CLI arguments to respect mdbook theme
-fn respect_theme_args(reserved_color: u32) -> [String; 4] {
+fn respect_theme_args(reserved_color: u32) -> [String; 5] {
     [
         format!("-Nfontcolor=#{reserved_color:x}"),
         format!("-Ncolor=#{reserved_color:x}"),
         format!("-Ecolor=#{reserved_color:x}"),
+        format!("-Efontcolor=#{reserved_color:x}"),
         format!("-Gbgcolor=transparent"),
     ]
 }
