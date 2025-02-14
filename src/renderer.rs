@@ -179,7 +179,7 @@ fn respect_theme_args(reserved_color: u32) -> [String; 5] {
         format!("-Ncolor=#{reserved_color:x}"),
         format!("-Ecolor=#{reserved_color:x}"),
         format!("-Efontcolor=#{reserved_color:x}"),
-        format!("-Gbgcolor=transparent"),
+        "-Gbgcolor=transparent".to_owned(),
     ]
 }
 
@@ -205,7 +205,7 @@ fn format_output(output: &str) -> String {
     }
 
     // yes yes: https://stackoverflow.com/a/1732454 ZA̡͊͠͝LGΌ and such
-    let output = DOCTYPE_RE.replace(&output, "");
+    let output = DOCTYPE_RE.replace(output, "");
     let output = XML_TAG_RE.replace(&output, "");
     // remove newlines between our tags to help commonmark determine the full set of HTML
     let output = NEW_LINE_TAGS_RE.replace_all(&output, "><");
