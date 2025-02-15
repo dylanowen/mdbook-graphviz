@@ -92,19 +92,7 @@ MDBOOK_preprocessor__graphviz__respect_theme="true" mdbook build
 
 ### Rendered
 
-<details>
-<summary> Default dark </summary>
-
-![](respect_theme_gh_default_dark_sample.svg)
-
-</details>
-
-<details>
-<summary> Dimmed dark </summary>
-
-![](respect_theme_gh_dimmed_dark_sample.svg)
-
-</details>
+![](respect_theme_gh_dark_sample.svg)
 
 Warning: this flag is not yet supported with `output-to-file` set.
 
