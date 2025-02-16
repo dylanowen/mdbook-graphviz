@@ -12,6 +12,7 @@ use mdbook::errors::Result;
 use pulldown_cmark::{Event, LinkType, Tag, TagEnd};
 use regex::Regex;
 
+use crate::preprocessor::ThemeColors;
 use crate::preprocessor::{GraphvizBlock, GraphvizConfig};
 use tokio::io::AsyncWriteExt;
 
@@ -34,21 +35,42 @@ impl GraphvizRenderer for CLIGraphviz {
         config: &GraphvizConfig,
     ) -> Result<Vec<Event<'a>>> {
         let reserved_color = config
-            .respect_theme
-            .then(|| reserve_color_code(&code))
+            .theme_colors
+            .as_ref()
+            .map(|_| reserve_color_code(&code, &config.arguments))
             .transpose()?;
 
-        let append_arguments = reserved_color.map(respect_theme_args);
-        let output = call_graphviz(
-            config
-                .arguments
-                .iter()
-                .chain(append_arguments.iter().flatten()),
-            &code,
-        )
-        .await?
-        .wait_with_output()
-        .await?;
+        let (processed_arguments, processed_code): (Vec<Cow<'_, OsStr>>, _) =
+            match (&config.theme_colors, reserved_color) {
+                (Some(ThemeColors { foreground }), Some(color_code)) => (
+                    config
+                        .arguments
+                        .iter()
+                        .map(|arg| {
+                            // converting str into OsStr
+                            replace_fg_with_color(arg, foreground, color_code).map(
+                                |arg| match arg {
+                                    Cow::Borrowed(arg) => Cow::Borrowed(arg.as_ref()),
+                                    Cow::Owned(arg) => Cow::Owned(arg.into()),
+                                },
+                            )
+                        })
+                        .collect::<Result<_, _>>()?,
+                    replace_fg_with_color(&code, foreground, color_code)?,
+                ),
+                _ => (
+                    config
+                        .arguments
+                        .iter()
+                        .map(|a| Cow::Borrowed(a.as_ref()))
+                        .collect(),
+                    Cow::Borrowed(&code),
+                ),
+            };
+        let output = call_graphviz(&processed_arguments, &processed_code)
+            .await?
+            .wait_with_output()
+            .await?;
 
         if !output.status.success() {
             return Err(
@@ -150,15 +172,17 @@ where
 }
 
 /// Reserve unused color code
-fn reserve_color_code(source: &str) -> io::Result<u32> {
+fn reserve_color_code(source: &str, arguments: &[String]) -> io::Result<u32> {
     lazy_static! {
-        static ref COLOR_CODES: Regex = Regex::new(r##""#[0-9a-fA-F]{6}""##).unwrap();
+        static ref COLOR_CODES: Regex = Regex::new(r"#[0-9a-fA-F]{6}").unwrap();
     }
 
+    let color_codes = &*COLOR_CODES;
     // Reserve one free hexadecimal color code
-    let color_codes: BTreeSet<u32> = COLOR_CODES
+    let color_codes: BTreeSet<u32> = color_codes
         .find_iter(source)
-        .map(|m| u32::from_str_radix(m.as_str().trim_matches(['"', '#']), 16))
+        .chain(arguments.iter().flat_map(|a| color_codes.find_iter(a)))
+        .map(|m| u32::from_str_radix(m.as_str().trim_start_matches('#'), 16))
         .chain(iter::once(Ok(0))) // add plain black in case no color codes are found
         .collect::<Result<_, _>>()
         .unwrap();
@@ -172,23 +196,23 @@ fn reserve_color_code(source: &str) -> io::Result<u32> {
         ))
 }
 
-/// Required CLI arguments to respect mdbook theme
-fn respect_theme_args(reserved_color: u32) -> [String; 5] {
-    [
-        format!("-Nfontcolor=#{reserved_color:x}"),
-        format!("-Ncolor=#{reserved_color:x}"),
-        format!("-Ecolor=#{reserved_color:x}"),
-        format!("-Efontcolor=#{reserved_color:x}"),
-        "-Gbgcolor=transparent".to_owned(),
-    ]
+/// Replace foreground color name with the quoted reserved color code
+fn replace_fg_with_color<'a>(
+    text: &'a str,
+    foreground: &str,
+    color_code: u32,
+) -> RegexResult<Cow<'a, str>> {
+    let foreground_name = Regex::new(foreground)?;
+    let processed = foreground_name.replace_all(text, &format!("#{color_code:x}"));
+    Ok(processed)
 }
 
 /// Replace color code with "var(--fg)"
 fn replace_color_with_fg(text: &mut String, color_code: u32) -> RegexResult<()> {
-    let reserved_color_code = RegexBuilder::new(&format!(r##""#{color_code:x}""##))
+    let reserved_color_code = RegexBuilder::new(&format!("#{color_code:x}"))
         .case_insensitive(true)
         .build()?;
-    let processed = reserved_color_code.replace_all(text, "\"var(--fg)\"");
+    let processed = reserved_color_code.replace_all(text, "var(--fg)");
     // `Regex::replace_all` would return `Cow::Borrowed` if no replacements were made
     if let Cow::Owned(processed) = processed {
         *text = processed;

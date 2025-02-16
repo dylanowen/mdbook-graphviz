@@ -74,20 +74,23 @@ digraph {
 ```
 ~~~
 
-## Respect mdBook theme
+## Use mdBook theme colors
 
-By default generated SVG colors are black edges and vertices on white background.
-If you want for a rendered graph instead to respect picked mdBook theme, you can enable `respect-theme` flag:
+By default generated SVG colors are black edges and vertices on a white background.
+If you want for a rendered graph instead to respect all mdBook themes,
+you can specify `theme-colors.foreground` option to replace a specified string in CLI arguments and in the code with foreground color:
 
 ```toml
 [preprocessor.graphviz]
-respect-theme = true
-```
-
-or
-
-```shell
-MDBOOK_preprocessor__graphviz__respect_theme="true" mdbook build
+theme-colors = { foreground = "foreground" }
+arguments = [
+  "-Tsvg_inline",
+  "-Gbgcolor=transparent",
+  "-Ecolor=foreground",
+  "-Efontcolor=foreground",
+  "-Ncolor=foreground",
+  "-Nfontcolor=foreground",
+]
 ```
 
 ### Rendered
