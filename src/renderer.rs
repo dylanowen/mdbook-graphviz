@@ -1,4 +1,9 @@
+use regex::RegexBuilder;
+use std::borrow::Cow;
+use std::collections::BTreeSet;
+use std::ffi::OsStr;
 use std::io;
+use std::iter;
 use std::process::Stdio;
 use tokio::process::{Child, Command};
 
@@ -7,8 +12,11 @@ use mdbook::errors::Result;
 use pulldown_cmark::{Event, LinkType, Tag, TagEnd};
 use regex::Regex;
 
+use crate::preprocessor::ThemeColors;
 use crate::preprocessor::{GraphvizBlock, GraphvizConfig};
 use tokio::io::AsyncWriteExt;
+
+type RegexResult<T> = std::result::Result<T, regex::Error>;
 
 #[async_trait]
 pub trait GraphvizRenderer {
@@ -26,20 +34,59 @@ impl GraphvizRenderer for CLIGraphviz {
         GraphvizBlock { code, .. }: GraphvizBlock,
         config: &GraphvizConfig,
     ) -> Result<Vec<Event<'a>>> {
-        let output = call_graphviz(&config.arguments, &code)
+        let reserved_color = config
+            .theme_colors
+            .as_ref()
+            .map(|_| reserve_color_code(&code, &config.arguments))
+            .transpose()?;
+
+        let (processed_arguments, processed_code): (Vec<Cow<'_, OsStr>>, _) =
+            match (&config.theme_colors, reserved_color) {
+                (Some(ThemeColors { foreground }), Some(color_code)) => (
+                    config
+                        .arguments
+                        .iter()
+                        .map(|arg| {
+                            // converting str into OsStr
+                            replace_fg_with_color(arg, foreground, color_code).map(
+                                |arg| match arg {
+                                    Cow::Borrowed(arg) => Cow::Borrowed(arg.as_ref()),
+                                    Cow::Owned(arg) => Cow::Owned(arg.into()),
+                                },
+                            )
+                        })
+                        .collect::<Result<_, _>>()?,
+                    replace_fg_with_color(&code, foreground, color_code)?,
+                ),
+                _ => (
+                    config
+                        .arguments
+                        .iter()
+                        .map(|a| Cow::Borrowed(a.as_ref()))
+                        .collect(),
+                    Cow::Borrowed(&code),
+                ),
+            };
+        let output = call_graphviz(&processed_arguments, &processed_code)
             .await?
             .wait_with_output()
             .await?;
-        if output.status.success() {
-            let graph_svg = String::from_utf8(output.stdout)?;
 
-            Ok(vec![
-                Event::Html(format_output(graph_svg).into()),
-                Event::Text("\n\n".into()),
-            ])
-        } else {
-            Err(io::Error::new(io::ErrorKind::InvalidData, "Error response from Graphviz").into())
+        if !output.status.success() {
+            return Err(
+                io::Error::new(io::ErrorKind::InvalidData, "Error response from Graphviz").into(),
+            );
         }
+
+        let mut graph_svg = String::from_utf8(output.stdout)?;
+        if let Some(reserved) = reserved_color {
+            replace_color_with_fg(&mut graph_svg, reserved)?;
+        }
+
+        Ok(vec![
+            Event::Html(format_output(&graph_svg).into()),
+            Event::Text("\n\n".into()),
+        ])
     }
 }
 
@@ -51,6 +98,8 @@ impl GraphvizRenderer for CLIGraphvizToFile {
         block: GraphvizBlock,
         config: &GraphvizConfig,
     ) -> Result<Vec<Event<'a>>> {
+        // For some reason files cannot depend on CSS variables, so ignore `config.respect_theme`
+
         let file_name = block.file_name();
         let output_path = block.output_path();
         let GraphvizBlock {
@@ -103,7 +152,11 @@ impl GraphvizRenderer for CLIGraphvizToFile {
     }
 }
 
-async fn call_graphviz(arguments: &Vec<String>, code: &str) -> Result<Child> {
+async fn call_graphviz<I, S>(arguments: I, code: &str) -> Result<Child>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
     let mut child = Command::new("dot")
         .args(arguments)
         .stdin(Stdio::piped())
@@ -118,7 +171,56 @@ async fn call_graphviz(arguments: &Vec<String>, code: &str) -> Result<Child> {
     Ok(child)
 }
 
-fn format_output(output: String) -> String {
+/// Reserve unused color code
+fn reserve_color_code(source: &str, arguments: &[String]) -> io::Result<u32> {
+    lazy_static! {
+        static ref COLOR_CODES: Regex = Regex::new(r"#[0-9a-fA-F]{6}").unwrap();
+    }
+
+    let color_codes = &*COLOR_CODES;
+    // Reserve one free hexadecimal color code
+    let color_codes: BTreeSet<u32> = color_codes
+        .find_iter(source)
+        .chain(arguments.iter().flat_map(|a| color_codes.find_iter(a)))
+        .map(|m| u32::from_str_radix(m.as_str().trim_start_matches('#'), 16))
+        .chain(iter::once(Ok(0))) // add plain black in case no color codes are found
+        .collect::<Result<_, _>>()
+        .unwrap();
+    (0..=0xffffff)
+        .rev()
+        .zip(color_codes.iter().rev())
+        .find_map(|(candidate, found)| (candidate != *found).then_some(candidate))
+        .ok_or(io::Error::new(
+            io::ErrorKind::FileTooLarge,
+            "Out of hexadecimal color literals",
+        ))
+}
+
+/// Replace foreground color name with the quoted reserved color code
+fn replace_fg_with_color<'a>(
+    text: &'a str,
+    foreground: &str,
+    color_code: u32,
+) -> RegexResult<Cow<'a, str>> {
+    let foreground_name = Regex::new(foreground)?;
+    let processed = foreground_name.replace_all(text, &format!("#{color_code:x}"));
+    Ok(processed)
+}
+
+/// Replace color code with "var(--fg)"
+fn replace_color_with_fg(text: &mut String, color_code: u32) -> RegexResult<()> {
+    let reserved_color_code = RegexBuilder::new(&format!("#{color_code:x}"))
+        .case_insensitive(true)
+        .build()?;
+    let processed = reserved_color_code.replace_all(text, "var(--fg)");
+    // `Regex::replace_all` would return `Cow::Borrowed` if no replacements were made
+    if let Cow::Owned(processed) = processed {
+        *text = processed;
+    }
+    Ok(())
+}
+
+fn format_output(output: &str) -> String {
     lazy_static! {
         static ref DOCTYPE_RE: Regex = Regex::new(r"<!DOCTYPE [^>]+>").unwrap();
         static ref XML_TAG_RE: Regex = Regex::new(r"<\?xml [^>]+\?>").unwrap();
@@ -127,7 +229,7 @@ fn format_output(output: String) -> String {
     }
 
     // yes yes: https://stackoverflow.com/a/1732454 ZA̡͊͠͝LGΌ and such
-    let output = DOCTYPE_RE.replace(&output, "");
+    let output = DOCTYPE_RE.replace(output, "");
     let output = XML_TAG_RE.replace(&output, "");
     // remove newlines between our tags to help commonmark determine the full set of HTML
     let output = NEW_LINE_TAGS_RE.replace_all(&output, "><");
