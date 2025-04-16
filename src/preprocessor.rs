@@ -20,6 +20,7 @@ pub static DEFAULT_INFO_STRING_PREFIX: &str = "dot process";
 pub struct GraphvizConfig {
     pub output_to_file: bool,
     pub link_to_file: bool,
+    pub theme_colors: Option<ThemeColors>,
     pub info_string: String,
     pub arguments: Vec<String>,
 }
@@ -29,10 +30,15 @@ impl Default for GraphvizConfig {
         Self {
             output_to_file: false,
             link_to_file: false,
+            theme_colors: None,
             info_string: DEFAULT_INFO_STRING_PREFIX.to_string(),
             arguments: vec![String::from("-Tsvg")],
         }
     }
+}
+
+pub struct ThemeColors {
+    pub foreground: String,
 }
 
 pub struct GraphvizPreprocessor;
@@ -69,6 +75,27 @@ impl Preprocessor for GraphvizPreprocessor {
                     .as_str()
                     .expect("info-string option is required to be a string")
                     .to_string();
+            }
+
+            if let Some(value) = ctx_config.get("theme-colors") {
+                let theme_colors = value
+                    .as_table()
+                    .expect("theme-colors option is required to be a table");
+                let foreground = theme_colors
+                    .get("foreground")
+                    .and_then(|v| v.as_str())
+                    .expect("theme-colors.foreground is required to be a string")
+                    .to_owned();
+                assert_eq!(
+                    theme_colors.len(),
+                    1,
+                    "theme-colors table is required to contain 1 field"
+                );
+                config.theme_colors = Some(ThemeColors { foreground });
+            }
+
+            if config.theme_colors.is_some() && config.output_to_file {
+                eprintln!("Warning: `theme-colors` and `output-to-file` flags are incompatible with each other");
             }
 
             if let Some(value) = ctx_config.get("arguments") {
