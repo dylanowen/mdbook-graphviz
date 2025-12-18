@@ -1,5 +1,5 @@
 import Tabby from "tabbyjs";
-import {setupSvgPanZoom} from "./viewer";
+import {setupSvg} from "./viewer";
 
 // crates/mdbook-svg-inline-preprocessor/src/renderer.rs
 const TAB_HEADER_ID_PREFIX = 'svg-tabs';
@@ -11,6 +11,6 @@ function setupTabby() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    setupSvgPanZoom();
+    setupSvg();
     setupTabby();
 });

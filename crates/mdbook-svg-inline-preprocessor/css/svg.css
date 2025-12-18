@@ -16,18 +16,7 @@
     height: var(--content-max-width);
 }
 
-/* crates/mdbook-svg-inline-preprocessor/src/renderer.rs */
 .svg-content {
     width: 100%;
-    height: calc(100% - 40px); /* TODO handle header height better */
-}
-
-.svg-content svg {
-    width: 100%;
     height: 100%;
-    border: 1px solid var(--fg)
-}
-
-.svg-content svg.svg-can-zoom {
-    border: 1px solid var(--links)
 }

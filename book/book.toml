@@ -22,3 +22,4 @@ additional-css = ["css/svg.css"]
 additional-js = ["js/svg.js"]
 
 [output.pdf]
+optional = true

@@ -11,6 +11,7 @@ pub use renderer::*;
 
 mod preprocessor;
 mod renderer;
+mod svg_inline;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]

@@ -1,12 +1,11 @@
 use std::path::Path;
 
 use anyhow::Result;
-use lazy_static::lazy_static;
 use pulldown_cmark::{Event, LinkType, Tag, TagEnd};
-use regex::Regex;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 
+use crate::svg_inline::format_for_inline;
 use crate::SvgBlock;
 
 pub(crate) const D2_CONTAINER_CLASS: &str = "svg-container";
@@ -77,33 +76,79 @@ pub trait SvgRenderer {
                 first = false;
             });
 
-            if self.output_to_file() {
-                let file_name = block.svg_file_name(relative_id.as_deref());
-                let graph_name = block.graph_name().unwrap_or_default();
-                let output_path = block.chapter_path().join(&file_name);
+            let file_name = block.svg_file_name(relative_id.as_deref());
+            let graph_name = block.graph_name().unwrap_or_default();
+            let output_path = block.chapter_path().join(&file_name);
 
+            // if we need the file, write it out
+            if self.link_to_file() || self.output_to_file() {
                 let mut file = File::create(output_path).await?;
                 file.write_all(source.as_bytes()).await?;
+            };
 
+            tab_content_nodes.push_str(&format!(
+                r##"<div id="{html_id}" class="{TAB_CONTENT_CLASS} mdbook-graphviz-output">"##
+            ));
+
+            if self.output_to_file() {
+                //
+                //
+                //
+                //
+                //
+                //
+                //
+                //
+                //
+                // TODO image doesn't have an id, if a href is there
+                //
+                // also should we move that special class to the graphiz package?
+                // mdbook-graphviz-output
+                //
+                //
+                //
+                //
+                //
+                //
+                //
+                //
+                //
                 if self.link_to_file() {
-                    tab_content_nodes
-                        .push_str(&format!("<a href=\"{file_name}\" title=\"{graph_name}\">"));
+                    tab_content_nodes.push_str(&format!(
+                        "<a href=\"{file_name}\" title=\"{graph_name}\" target=\"_blank\">"
+                    ));
                 }
 
                 tab_content_nodes.push_str(&format!(
-                    "<img src=\"{file_name}\" alt=\"{graph_name}\" title=\"{graph_name}\">"
+                    r##"<img id="{html_id}" src="{file_name}" alt="{graph_name}" title="{graph_name}">"##
                 ));
 
                 if self.link_to_file() {
                     tab_content_nodes.push_str("</a>");
                 }
             } else {
-                // TODO support linking to file
-                tab_content_nodes.push_str(&format!(
-                    r##"<div id="{html_id}" class="{TAB_CONTENT_CLASS} mdbook-graphviz-output">{}</div>"##,
-                    format_for_inline(source)
+                // wrap our SVG in a div to give us a good shadow dom start point
+                tab_content_nodes.push_str("<div>");
+                tab_content_nodes.push_str(&format_for_inline(
+                    &source,
+                    &block.svg_id_prefix(relative_id.as_deref()),
                 ));
+                tab_content_nodes.push_str("</div>");
+
+                // Append our link at the bottom to not impact interactivity
+                if self.link_to_file() {
+                    tab_content_nodes.push_str(&format!(
+                        "<a href=\"{file_name}\" title=\"{graph_name}\" target=\"_blank\">Download{}</a>",
+                        if !graph_name.trim().is_empty() {
+                            format!(": {}", graph_name)
+                        } else {
+                            "".to_string()
+                        }
+                    ));
+                }
             }
+
+            tab_content_nodes.push_str("</div>");
         }
 
         tab_header_nodes.iter_mut().for_each(|h| {
@@ -168,7 +213,10 @@ pub trait SvgRenderer {
                     nodes.push(Event::End(TagEnd::Link));
                 }
             } else {
-                nodes.push(Event::Html(format_for_inline(source).into()));
+                // TODO support linking to file
+                nodes.push(Event::Html(
+                    format_for_inline(&source, &block.svg_id_prefix(relative_id.as_deref())).into(),
+                ));
             }
         }
         nodes.push(Event::Text("\n\n".into()));
@@ -180,30 +228,11 @@ pub trait SvgRenderer {
     async fn render_svgs(&self, block: &SvgBlock) -> Result<Vec<SvgOutput>>;
 }
 
+#[derive(Clone)]
 pub struct SvgOutput {
     pub relative_id: Option<String>,
     pub title: String,
     pub source: String,
-}
-
-fn format_for_inline(output: String) -> String {
-    lazy_static! {
-        static ref DOCTYPE_RE: Regex = Regex::new(r"<!DOCTYPE [^>]+>").unwrap();
-        static ref XML_TAG_RE: Regex = Regex::new(r"<\?xml [^>]+\?>").unwrap();
-        static ref NEW_LINE_TAGS_RE: Regex = Regex::new(r">\s+<").unwrap();
-        static ref NEWLINES_RE: Regex = Regex::new(r"\n").unwrap();
-    }
-
-    // yes yes: https://stackoverflow.com/a/1732454 ZA̡͊͠͝LGΌ and such
-    let output = DOCTYPE_RE.replace(&output, "");
-    let output = XML_TAG_RE.replace(&output, "");
-    // remove newlines between our tags to help commonmark determine the full set of HTML
-    let output = NEW_LINE_TAGS_RE.replace_all(&output, "><");
-    // remove explicit newlines as they won't be preserved and break commonmark parsing
-    let output = NEWLINES_RE.replace_all(&output, "");
-    let output = output.trim();
-
-    output.to_string()
 }
 
 fn sanitize_html_id(id: &str) -> String {
@@ -219,69 +248,236 @@ fn sanitize_html_id(id: &str) -> String {
 
 #[cfg(test)]
 pub(crate) mod test {
-    use super::*;
-    use crate::preprocessor::SvgBlockBuilder;
-    use crate::SvgRendererSharedConfig;
     use std::path::PathBuf;
 
-    #[tokio::test]
-    async fn html_events() {
-        let block = SvgBlockBuilder::new(
-            "Name".into(),
-            PathBuf::from("book"),
-            PathBuf::from("chapter"),
-            "svg".into(),
-            Some("graph".into()),
-            0,
-        )
-        .build(0);
+    use pulldown_cmark::CowStr;
+    use scraper::{Html, Selector};
 
+    use crate::preprocessor::SvgBlockBuilder;
+    use crate::SvgRendererSharedConfig;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn html_inline_events_single() {
         let renderer = TestRenderer {
-            config: SvgRendererSharedConfig::default(),
+            config: SvgRendererSharedConfig {
+                renderer: "html".into(),
+                ..Default::default()
+            },
+            num_blocks: 1,
         };
-        let mut events = renderer.render(block).await.unwrap().into_iter();
-        assert_eq!(events.next(), Some(Event::Text("\n\n".into())));
-        if let Some(Event::Html(_)) = events.next() {
-        } else {
-            panic!("Unexpected next event")
+
+        // check that the html value is as expected
+        let html = render_html(test_block(), renderer).await;
+        let mut element = html.root_element();
+        for expected in [".svg-container", "div > div", "#svg-content-svg_0-0"] {
+            element = element
+                .select(&Selector::parse(expected).unwrap())
+                .next()
+                .expect(&format!("Expected \"{expected}\" in {}", element.html()));
         }
+
+        assert!(element.attr("class").unwrap().contains("svg-content"));
+        assert!(element
+            .attr("class")
+            .unwrap()
+            .contains("mdbook-graphviz-output"));
+    }
+
+    #[tokio::test]
+    async fn html_file_events_single() {
+        let renderer = TestRenderer {
+            config: SvgRendererSharedConfig {
+                renderer: "html".into(),
+                output_to_file: true,
+                ..Default::default()
+            },
+            num_blocks: 1,
+        };
+
+        // check that the html value is as expected
+        let html = render_html(test_block(), renderer).await;
+        let mut element = html.root_element();
+        for expected in [".svg-container", "div > div", "#svg-content-svg_0-0"] {
+            element = element
+                .select(&Selector::parse(expected).unwrap())
+                .next()
+                .expect(&format!("Expected \"{expected}\" in {}", element.html()));
+        }
+
+        assert!(element.attr("class").unwrap().contains("svg-content"));
+        assert!(element
+            .attr("class")
+            .unwrap()
+            .contains("mdbook-graphviz-output"));
+    }
+
+    #[tokio::test]
+    async fn html_events_multiple() {
+        let renderer = TestRenderer {
+            config: SvgRendererSharedConfig {
+                renderer: "html".into(),
+                ..Default::default()
+            },
+            num_blocks: 2,
+        };
+
+        // check that the html value is as expected
+        let html = render_html(test_block(), renderer).await;
+        let mut element = html.root_element();
+        for expected in [".svg-container", "div > div"] {
+            element = element
+                .select(&Selector::parse(expected).unwrap())
+                .next()
+                .expect(&format!("Expected \"{expected}\" in {}", element.html()));
+        }
+
+        // check that for each graph we have the correct headers
+        let headers_selector = Selector::parse("ul > li > a").unwrap();
+        let mut headers = element.select(&headers_selector);
+        // check that for each graph we have the correct classes
+        for block_id in ["#svg-content-svg_0-0", "#svg-content-svg_0-1"] {
+            let header = headers.next().unwrap();
+            let block = element
+                .select(&Selector::parse(block_id).unwrap())
+                .next()
+                .expect(&format!("Expected \"{block_id}\" in {}", element.html()));
+
+            assert_eq!(header.attr("href").unwrap(), block_id);
+
+            assert!(block.attr("class").unwrap().contains("svg-content"));
+            assert!(block
+                .attr("class")
+                .unwrap()
+                .contains("mdbook-graphviz-output"));
+        }
+    }
+
+    #[tokio::test]
+    async fn md_inline_events() {
+        let renderer = TestRenderer {
+            config: SvgRendererSharedConfig {
+                renderer: "other".into(),
+                ..Default::default()
+            },
+            num_blocks: 1,
+        };
+        let mut events = renderer.render(test_block()).await.unwrap().into_iter();
+        assert_eq!(events.next(), Some(Event::Text("\n\n".into())));
+        assert_eq!(events.next(), Some(Event::Html("".into())));
         assert_eq!(events.next(), Some(Event::Text("\n\n".into())));
         assert_eq!(events.next(), None);
     }
 
-    // #[tokio::test]
-    // async fn file_events() {
-    //     let code = r#"digraph Test { a -> b }"#;
-    //
-    //     let block = GraphvizBlock {
-    //         graph_name: "Name".into(),
-    //         code: code.into(),
-    //         chapter_name: "".into(),
-    //         chapter_path: "test-output".into(),
-    //         index: 0,
-    //     };
-    //
-    //     let config = GraphvizConfig::default();
-    //     let mut events = CLIGraphvizToFile::render_graphviz(block, &config)
-    //         .await
-    //         .expect("Expect rendering to succeed")
-    //         .into_iter();
-    //     let next = events.next();
-    //     assert!(
-    //         matches!(next, Some(Event::Start(Tag::Image { .. }))),
-    //         "Expected Image got {next:#?}"
-    //     );
-    //     let next = events.next();
-    //     assert!(
-    //         matches!(next, Some(Event::End(TagEnd::Image))),
-    //         "Expected End Image got {next:#?}"
-    //     );
-    //     assert_eq!(events.next(), Some(Event::Text("\n\n".into())));
-    //     assert_eq!(events.next(), None);
-    // }
+    #[tokio::test]
+    async fn md_file_events() {
+        let renderer = TestRenderer {
+            config: SvgRendererSharedConfig {
+                renderer: "other".into(),
+                output_to_file: true,
+                ..Default::default()
+            },
+            num_blocks: 1,
+        };
+        let mut events = renderer.render(test_block()).await.unwrap().into_iter();
+        assert_eq!(events.next(), Some(Event::Text("\n\n".into())));
+        let next = events.next();
+        assert!(
+            matches!(next, Some(Event::Start(Tag::Image { .. }))),
+            "Expected Image got {next:#?}"
+        );
+        let next = events.next();
+        assert!(
+            matches!(next, Some(Event::End(TagEnd::Image))),
+            "Expected End Image got {next:#?}"
+        );
+        assert_eq!(events.next(), Some(Event::Text("\n\n".into())));
+        assert_eq!(events.next(), None);
+    }
+
+    #[tokio::test]
+    async fn md_linked_file_events() {
+        let renderer = TestRenderer {
+            config: SvgRendererSharedConfig {
+                renderer: "other".into(),
+                output_to_file: true,
+                link_to_file: true,
+                ..Default::default()
+            },
+            num_blocks: 1,
+        };
+        let expected_url = CowStr::from("name_graph_svg_0.generated.svg");
+        let mut events = renderer.render(test_block()).await.unwrap().into_iter();
+        assert_eq!(events.next(), Some(Event::Text("\n\n".into())));
+        let next = events.next();
+        assert!(
+            matches!(
+                next,
+                Some(Event::Start(Tag::Link {
+                    ref dest_url,
+                    ..
+                })) if *dest_url == expected_url
+            ),
+            "Expected Link got {next:#?}"
+        );
+        let next = events.next();
+        assert!(
+            matches!(
+                next,
+                Some(Event::Start(Tag::Image {
+                    ref dest_url,
+                    ..
+                })) if *dest_url == expected_url
+            ),
+            "Expected Image got {next:#?}"
+        );
+        let next = events.next();
+        assert!(
+            matches!(next, Some(Event::End(TagEnd::Image))),
+            "Expected End Image got {next:#?}"
+        );
+        let next = events.next();
+        assert!(
+            matches!(next, Some(Event::End(TagEnd::Link))),
+            "Expected End Image got {next:#?}"
+        );
+        assert_eq!(events.next(), Some(Event::Text("\n\n".into())));
+        assert_eq!(events.next(), None);
+    }
+
+    async fn render_html<R: SvgRenderer>(block: SvgBlock, renderer: R) -> Html {
+        let mut events = renderer.render(block).await.unwrap().into_iter();
+        assert_eq!(events.next(), Some(Event::Text("\n\n".into())));
+        let html = if let Some(Event::Html(html)) = events.next() {
+            println!("{html:?}");
+            Html::parse_fragment(&html)
+        } else {
+            panic!("Unexpected next event")
+        };
+        assert_eq!(events.next(), Some(Event::Text("\n\n".into())));
+        assert_eq!(events.next(), None);
+
+        assert_eq!(html.errors.len(), 0);
+
+        html
+    }
+
+    fn test_block() -> SvgBlock {
+        SvgBlockBuilder::new(
+            "Name".into(),
+            PathBuf::from("test-output"),
+            PathBuf::from("chapter.md"),
+            "svg".into(),
+            Some("graph".into()),
+            0,
+        )
+        .build(0)
+    }
 
     pub struct TestRenderer {
         pub config: SvgRendererSharedConfig,
+        pub num_blocks: usize,
     }
 
     impl SvgRenderer for TestRenderer {
@@ -310,11 +506,16 @@ pub(crate) mod test {
         }
 
         async fn render_svgs(&self, block: &SvgBlock) -> Result<Vec<SvgOutput>> {
-            Ok(vec![SvgOutput {
-                relative_id: None,
-                title: "Test".to_string(),
-                source: block.source_code().to_string(),
-            }])
+            let mut blocks = Vec::with_capacity(self.num_blocks);
+            for i in 0..self.num_blocks {
+                blocks.push(SvgOutput {
+                    relative_id: Some(format!("{i}")),
+                    title: format!("Test {i}"),
+                    source: block.source_code().to_string(),
+                });
+            }
+
+            Ok(blocks)
         }
     }
 }

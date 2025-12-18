@@ -4,7 +4,10 @@ const CssMinimizerPlugin = require("css-minimizer-webpack-plugin");
 
 module.exports = (env, argv) => {
     return {
-        entry: ['./ts/index.ts', './css/index.css'],
+        entry: {
+            'svg': ['./ts/svg.ts', './css/svg.css'],
+            'svg-shadow': './css/svg-shadow.css',
+        },
         devtool: (argv.mode === 'development') ? 'inline-source-map' : 'source-map',
         module: {
             rules: [
@@ -25,13 +28,12 @@ module.exports = (env, argv) => {
         plugins: [
             new MiniCssExtractPlugin({
                 // filename: '../css/svg.css'
-                filename: 'svg.css'
+                filename: '[name].css'
             })
         ],
         output: {
-            // path: path.resolve(__dirname, '../../sample/book/html/js'),
             path: path.resolve(__dirname, 'dist'),
-            filename: 'svg.js',
+            filename: '[name].js',
         },
         optimization: {
             minimize: (argv.mode === 'production'),

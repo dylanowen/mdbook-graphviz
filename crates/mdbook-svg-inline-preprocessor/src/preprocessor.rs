@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+use std::ffi::OsString;
 use std::future::Future;
 use std::mem;
 use std::path::{Path, PathBuf};
@@ -6,6 +8,7 @@ use std::pin::Pin;
 use anyhow::{anyhow, Result};
 use async_recursion::async_recursion;
 use futures::future;
+use lazy_static::lazy_static;
 use mdbook::book::{Book, Chapter};
 use mdbook::preprocess::PreprocessorContext;
 use mdbook::utils::new_cmark_parser;
@@ -98,8 +101,16 @@ pub trait SvgPreprocessor {
             .build()
             .unwrap()
             .block_on(async {
-                const FILE_VERSION: &str =
-                    concat!("/* mdBook-svg:", env!("CARGO_PKG_VERSION"), "*/");
+                lazy_static! {
+                    static ref FILE_VERSION: String = format!(
+                        "/* mdBook-svg:{}{}*/",
+                        env!("CARGO_PKG_VERSION"),
+                        // allow for a custom version to be set for quick local iteration
+                        option_env!("MDBOOK_SVG_WEB_VERSION")
+                            .map(|v| format!("_{v}"))
+                            .unwrap_or_default()
+                    );
+                }
 
                 async fn browser_content_exists(location: &Path) -> Result<bool> {
                     if let Ok(mut file) = File::open(location).await {
@@ -133,7 +144,7 @@ pub trait SvgPreprocessor {
                     log::info!("Creating/Updating to {:?}", location);
 
                     let mut file = File::create(location).await?;
-                    let full_content = format!("{}{}", FILE_VERSION, content);
+                    let full_content = format!("{}{content}", FILE_VERSION.as_str());
                     file.write_all(full_content.as_bytes()).await?;
 
                     Ok(())
@@ -147,8 +158,18 @@ pub trait SvgPreprocessor {
 
                 if let Some(css_file) = &renderer.copy_css() {
                     const SVG_CSS: &str = include_str!("../dist/svg.css");
+                    const SVG_SHADOW_CSS: &str = include_str!("../dist/svg-shadow.css");
 
-                    write_custom_browser_content(&ctx.root.join(css_file), SVG_CSS).await?;
+                    let qualified_css_file = ctx.root.join(css_file);
+                    write_custom_browser_content(&qualified_css_file, SVG_CSS).await?;
+
+                    let mut shadow_file: OsString = qualified_css_file.file_stem().unwrap().into();
+                    shadow_file.push("-shadow.css");
+                    write_custom_browser_content(
+                        &qualified_css_file.parent().unwrap().join(shadow_file),
+                        SVG_SHADOW_CSS,
+                    )
+                    .await?;
                 }
 
                 let book_src_dir = ctx.root.join(&ctx.config.book.src);
@@ -336,21 +357,37 @@ impl SvgBlock {
         format!("{}_{}", normalize_id(&self.preprocessor_name), self.index,)
     }
 
+    /// Unique across all the graphs in the chapter
+    pub fn svg_id_prefix(&self, relative_id: Option<&str>) -> String {
+        format!(
+            "{}{}",
+            self.index,
+            relative_id
+                .map(|s| format!("_{}", normalize_id(s)))
+                .unwrap_or_default()
+        )
+    }
+
     /// Unique (and "pretty") across all graphs in the book for all svg preprocessors
     pub fn svg_file_name(&self, relative_id: Option<&str>) -> String {
         format!(
-            "{}{}_{}_{}{}.generated.svg",
+            "{}_{}{}_{}.{}.generated.svg",
+            self.chapter_file_stem(),
             normalize_id(&self.chapter_name),
             self.graph_name
                 .as_ref()
                 .map(|s| format!("_{}", normalize_id(s)))
                 .unwrap_or_default(),
+            self.svg_id_prefix(relative_id),
             normalize_id(&self.preprocessor_name),
-            self.index,
-            relative_id
-                .map(|s| format!("_{}", normalize_id(s)))
-                .unwrap_or_default(),
         )
+    }
+
+    fn chapter_file_stem(&self) -> Cow<str> {
+        self.chapter_relative_path
+            .file_stem()
+            .unwrap()
+            .to_string_lossy()
     }
 
     pub fn chapter_path(&self) -> PathBuf {
@@ -513,6 +550,7 @@ digraph Test {
                 info_string: "svg process".to_string(),
                 ..Default::default()
             },
+            num_blocks: 1,
         };
         let chapter = TestPreprocessor
             .process_chapter(&renderer, new_chapter(expected), Path::new(""))
@@ -548,6 +586,7 @@ digraph Test {
                 info_string: "custom".to_string(),
                 ..Default::default()
             },
+            num_blocks: 1,
         };
         let chapter = TestPreprocessor
             .process_chapter(&renderer, chapter, Path::new(""))
@@ -572,6 +611,7 @@ digraph Test {
                 info_string: "svg".to_string(),
                 ..Default::default()
             },
+            num_blocks: 1,
         };
         let chapter = TestPreprocessor
             .process_chapter(&renderer, new_chapter(expected), Path::new(""))
@@ -604,6 +644,7 @@ digraph Test {
                 info_string: "svg".to_string(),
                 ..Default::default()
             },
+            num_blocks: 1,
         };
         let chapter = TestPreprocessor
             .process_chapter(&renderer, chapter, Path::new(""))
@@ -638,6 +679,7 @@ digraph Test {
                 info_string: "svg".to_string(),
                 ..Default::default()
             },
+            num_blocks: 1,
         };
         let chapter = TestPreprocessor
             .process_chapter(&renderer, chapter, Path::new(""))
@@ -645,6 +687,80 @@ digraph Test {
             .unwrap();
 
         assert_eq!(chapter.content, expected);
+    }
+
+    #[test]
+    fn test_svg_file_name() {
+        let block = SvgBlockBuilder::new(
+            CHAPTER_NAME.to_string(),
+            PathBuf::from("/path/to/book"),
+            PathBuf::from("src/other/chapter-stem.md"),
+            "test".to_string(),
+            None,
+            0,
+        )
+        .build(0);
+
+        assert_eq!(
+            block.svg_file_name(None),
+            "chapter-stem_test_chapter_0.test.generated.svg"
+        );
+        assert_eq!(
+            block.svg_file_name(Some("a")),
+            "chapter-stem_test_chapter_0_a.test.generated.svg"
+        );
+
+        let block = SvgBlockBuilder::new(
+            CHAPTER_NAME.to_string(),
+            PathBuf::from("/path/to/book"),
+            PathBuf::from("src/other/chapter-stem.md"),
+            "test".to_string(),
+            Some("Graph Name".to_string()),
+            0,
+        )
+        .build(0);
+
+        assert_eq!(
+            block.svg_file_name(None),
+            "chapter-stem_test_chapter_graph_name_0.test.generated.svg"
+        );
+        assert_eq!(
+            block.svg_file_name(Some("a")),
+            "chapter-stem_test_chapter_graph_name_0_a.test.generated.svg"
+        );
+    }
+
+    #[test]
+    fn test_chapter_file_stem() {
+        let block = SvgBlockBuilder::new(
+            CHAPTER_NAME.to_string(),
+            PathBuf::from("/path/to/book"),
+            PathBuf::from("src/other/chapter-stem.a.md"),
+            "test".to_string(),
+            None,
+            0,
+        )
+        .build(0);
+
+        assert_eq!(block.chapter_file_stem(), "chapter-stem.a");
+    }
+
+    #[test]
+    fn test_chapter_path() {
+        let block = SvgBlockBuilder::new(
+            CHAPTER_NAME.to_string(),
+            PathBuf::from("/path/to/book"),
+            PathBuf::from("src/other/chapter-stem.md"),
+            "test".to_string(),
+            None,
+            0,
+        )
+        .build(0);
+
+        assert_eq!(
+            block.chapter_path(),
+            PathBuf::from("/path/to/book/src/other")
+        );
     }
 
     struct TestPreprocessor;
@@ -667,6 +783,7 @@ digraph Test {
         ) -> Result<Self::Renderer> {
             Ok(TestRenderer {
                 config: shared_config,
+                num_blocks: 1,
             })
         }
     }

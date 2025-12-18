@@ -22,9 +22,6 @@ release-js:
 test:
 	cargo test
 
-install:
-	cargo install --force --path .
-
 clean:
 	cargo clean
 
