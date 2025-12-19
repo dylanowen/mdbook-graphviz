@@ -31,6 +31,7 @@ test:
     cargo test
 
 pre-commit: fix fmt lint test release
+    cargo publish --dry-run
 
 install:
     cargo install --force --path .
