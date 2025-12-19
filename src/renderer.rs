@@ -2,15 +2,13 @@ use std::io;
 use std::process::Stdio;
 use tokio::process::{Child, Command};
 
-use async_trait::async_trait;
-use mdbook::errors::Result;
-use pulldown_cmark::{Event, LinkType, Tag, TagEnd};
+use mdbook_markdown::pulldown_cmark::{Event, LinkType, Tag, TagEnd};
+use mdbook_preprocessor::errors::Result;
 use regex::Regex;
-
-use crate::preprocessor::{GraphvizBlock, GraphvizConfig};
 use tokio::io::AsyncWriteExt;
 
-#[async_trait]
+use crate::preprocessor::{GraphvizBlock, GraphvizConfig};
+
 pub trait GraphvizRenderer {
     async fn render_graphviz<'a>(
         block: GraphvizBlock,
@@ -20,7 +18,6 @@ pub trait GraphvizRenderer {
 
 pub struct CLIGraphviz;
 
-#[async_trait]
 impl GraphvizRenderer for CLIGraphviz {
     async fn render_graphviz<'a>(
         GraphvizBlock { code, .. }: GraphvizBlock,
@@ -45,7 +42,6 @@ impl GraphvizRenderer for CLIGraphviz {
 
 pub struct CLIGraphvizToFile;
 
-#[async_trait]
 impl GraphvizRenderer for CLIGraphvizToFile {
     async fn render_graphviz<'a>(
         block: GraphvizBlock,
