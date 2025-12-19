@@ -1,0 +1,12 @@
+[book]
+authors = ["Dylan Owen"]
+language = "en"
+src = "src"
+title = "Sample"
+
+[preprocessor.graphviz]
+command = "cargo run -p mdbook-graphviz"
+
+[output.html]
+
+[output.markdown]

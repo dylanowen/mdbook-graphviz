@@ -1,18 +1,19 @@
+use crate::renderer::{CLIGraphviz, CLIGraphvizToFile, GraphvizRenderer};
+use async_recursion::async_recursion;
 use core::mem;
+use futures::future;
+use mdbook_markdown::pulldown_cmark::CodeBlockKind::Fenced;
+use mdbook_markdown::pulldown_cmark::{Event, Tag, TagEnd};
+use mdbook_markdown::{MarkdownOptions, new_cmark_parser};
+use mdbook_preprocessor::book::{Book, BookItem, Chapter};
+use mdbook_preprocessor::errors::Result;
+use mdbook_preprocessor::{Preprocessor, PreprocessorContext};
+use pulldown_cmark_to_cmark::cmark;
+use std::future::Future;
 use std::marker::PhantomData;
 use std::path::PathBuf;
-
-use async_recursion::async_recursion;
-use futures::future;
-use mdbook::book::{Book, Chapter};
-use mdbook::errors::Result;
-use mdbook::preprocess::{Preprocessor, PreprocessorContext};
-use mdbook::utils::new_cmark_parser;
-use mdbook::BookItem;
-use pulldown_cmark::{CodeBlockKind::Fenced, Event, Tag, TagEnd};
-use pulldown_cmark_to_cmark::cmark;
-
-use crate::renderer::{CLIGraphviz, CLIGraphvizToFile, GraphvizRenderer};
+use std::pin::Pin;
+use toml::Table;
 
 pub static PREPROCESSOR_NAME: &str = "graphviz";
 pub static DEFAULT_INFO_STRING_PREFIX: &str = "dot process";
@@ -51,7 +52,7 @@ impl Preprocessor for GraphvizPreprocessor {
     fn run(&self, ctx: &PreprocessorContext, mut book: Book) -> Result<Book> {
         let mut config = GraphvizConfig::default();
 
-        if let Some(ctx_config) = ctx.config.get_preprocessor(self.name()) {
+        if let Some(ctx_config) = ctx.config.preprocessors::<Table>()?.get(self.name()) {
             if let Some(value) = ctx_config.get("output-to-file") {
                 config.output_to_file = value
                     .as_bool()
@@ -96,21 +97,16 @@ impl Preprocessor for GraphvizPreprocessor {
             .block_on(async {
                 if config.output_to_file {
                     Graphviz::<CLIGraphvizToFile>::new(src_dir, config)
-                        .process_sub_items(&mut book.sections)
+                        .process_sub_items(&mut book.items)
                         .await
                 } else {
                     Graphviz::<CLIGraphviz>::new(src_dir, config)
-                        .process_sub_items(&mut book.sections)
+                        .process_sub_items(&mut book.items)
                         .await
                 }
             })?;
 
         Ok(book)
-    }
-
-    fn supports_renderer(&self, _renderer: &str) -> bool {
-        // since we're just outputting markdown images or inline html, this "should" support any renderer
-        true
     }
 }
 
@@ -166,8 +162,8 @@ impl<R: GraphvizRenderer> Graphviz<R> {
         let mut graphviz_block_builder: Option<GraphvizBlockBuilder> = None;
         let mut image_index = 0;
 
-        let events = new_cmark_parser(&chapter.content, false);
-        let mut event_futures = Vec::new();
+        let events = new_cmark_parser(&chapter.content, &MarkdownOptions::default());
+        let mut event_futures = Vec::<Pin<Box<dyn Future<Output = _>>>>::new();
 
         for e in events {
             if let Some(mut builder) = graphviz_block_builder.take() {
@@ -181,7 +177,7 @@ impl<R: GraphvizRenderer> Graphviz<R> {
                         let block = builder.build(image_index);
                         image_index += 1;
 
-                        event_futures.push(R::render_graphviz(block, &self.config));
+                        event_futures.push(Box::pin(R::render_graphviz(block, &self.config)));
                     }
                     _ => {
                         graphviz_block_builder = Some(builder);
@@ -210,14 +206,14 @@ impl<R: GraphvizRenderer> Graphviz<R> {
             }
         }
 
-        let events = future::join_all(event_futures)
+        let mut events = future::join_all(event_futures)
             .await
             .into_iter()
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
             .flatten();
 
-        cmark(events, &mut buf)?;
+        cmark(&mut events, &mut buf)?;
 
         chapter.content = buf;
 
@@ -316,8 +312,6 @@ fn normalize_id(content: &str) -> String {
 
 #[cfg(test)]
 mod test {
-    use async_trait::async_trait;
-
     use super::*;
 
     use std::time::{Duration, Instant};
@@ -327,7 +321,6 @@ mod test {
 
     struct NoopRenderer;
 
-    #[async_trait]
     impl GraphvizRenderer for NoopRenderer {
         async fn render_graphviz<'a>(
             block: GraphvizBlock,
@@ -522,7 +515,6 @@ digraph Test {
 
     const SLEEP_DURATION: Duration = Duration::from_millis(100);
     struct SleepyRenderer;
-    #[async_trait]
     impl GraphvizRenderer for SleepyRenderer {
         async fn render_graphviz<'a>(
             _block: GraphvizBlock,
